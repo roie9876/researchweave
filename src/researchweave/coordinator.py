@@ -616,6 +616,25 @@ class ResearchCoordinator:
             self._run_single_task(inv, task)
             tasks_executed += 1
 
+        # After executing the requested batch of tasks, check if all tasks are now terminal
+        inv_final = self.store.get_investigation(investigation_id)
+        if inv_final and inv_final["status"] == InvestigationStatus.RUNNING.value:
+            remaining_tasks = self.store.list_tasks(investigation_id)
+            if remaining_tasks and all(
+                t["status"] in (TaskStatus.COMPLETED.value, TaskStatus.STOPPED.value)
+                for t in remaining_tasks
+            ):
+                inv_final["status"] = InvestigationStatus.COMPLETED.value
+                self.store.save_investigation(inv_final)
+                self.store.append_event(
+                    investigation_id,
+                    "investigation_completed",
+                    "Lead-Research-Coordinator",
+                    "All planned and dynamically spawned research tasks completed and independently audited.",
+                    {},
+                )
+                self._refresh_report(investigation_id)
+
         return self.get_full_investigation_bundle(investigation_id)
 
     def _check_stopping_conditions(self, inv: dict[str, Any]) -> str | None:

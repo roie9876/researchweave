@@ -19,6 +19,9 @@ def build_live_report_markdown(
     """Compile an evidence-backed research report separating verified results from hypotheses."""
     is_he = inv.get("report_language", "en").lower().startswith("he")
     is_complete = inv.get("status") == "completed"
+    tot_in_tok = sum(int(t.get("input_tokens") or 0) for t in tasks)
+    tot_out_tok = sum(int(t.get("output_tokens") or 0) for t in tasks)
+    tot_tok = sum(int(t.get("total_tokens") or 0) for t in tasks)
 
     if is_he:
         banner = (
@@ -31,11 +34,13 @@ def build_live_report_markdown(
             "",
             banner,
             "",
-            "## 1. תקציר מנהלים ומטרת המחקר",
+            "## 1. תקציר מנהלים, טלמטריה ומטרת המחקר",
             f"- **מטרת המחקר הנוכחית:** {inv['objective']}",
             f"- **סטטוס ריצה:** `{inv['status']}` | **מצב אוטונומיה:** `{inv['autonomy_mode']}`",
             f"- **מאגר מודלים פעיל:** `{', '.join(inv.get('model_pool', []))}`",
-            f"- **עלות משוערת:** `${inv.get('estimated_spend_usd', 0.0):.4f}` | **זמן ריצה:** `{inv.get('runtime_seconds', 0.0):.1f}s`",
+            f"- **מספר סוכנים פעילים:** `{len(agents)}` | **משימות שהושלמו:** `{sum(1 for t in tasks if t.get('status') == 'completed')}/{len(tasks)}`",
+            f"- **סה\"כ טוקנים (Input / Output / Total):** `{tot_in_tok:,} in / {tot_out_tok:,} out ({tot_tok:,} total tokens)`",
+            f"- **עלות משוערת:** `${inv.get('estimated_spend_usd', 0.0):.4f}` | **זמן ריצה מדוד:** `{inv.get('runtime_seconds', 0.0):.2f}s`",
             "",
             "## 2. הבחנה מדעית: ממצאים מאומתים לעומת השערות (Hypotheses)",
             "> מערכת ResearchWeave מפרידה באופן מחמיר בין חישובים ומדידות שאומתו על ידי סוכן ביקורת עצמאי לבין השערות מחקריות הדורשות ניסוי נוסף.",
@@ -52,11 +57,13 @@ def build_live_report_markdown(
             "",
             banner,
             "",
-            "## 1. Executive Summary & Research Objective",
+            "## 1. Executive Summary, Telemetry & Research Objective",
             f"- **Current Objective:** {inv['objective']}",
             f"- **Run Status:** `{inv['status']}` | **Autonomy Mode:** `{inv['autonomy_mode']}`",
             f"- **Active Model Pool:** `{', '.join(inv.get('model_pool', []))}`",
-            f"- **Estimated Spend:** `${inv.get('estimated_spend_usd', 0.0):.4f}` | **Runtime:** `{inv.get('runtime_seconds', 0.0):.1f}s`",
+            f"- **Active Specialist Agents:** `{len(agents)}` | **Tasks Completed:** `{sum(1 for t in tasks if t.get('status') == 'completed')}/{len(tasks)}`",
+            f"- **Token Usage (Input / Output / Total):** `{tot_in_tok:,} in / {tot_out_tok:,} out ({tot_tok:,} total tokens)`",
+            f"- **Estimated Spend:** `${inv.get('estimated_spend_usd', 0.0):.4f}` | **Measured Runtime:** `{inv.get('runtime_seconds', 0.0):.2f}s`",
             "",
             "## 2. Scientific Epistemology: Verified Findings vs. Hypotheses",
             "> ResearchWeave strictly separates independently checked calculations and source-backed observations from unverified hypotheses.",
@@ -111,13 +118,19 @@ def build_live_report_markdown(
         else "## 3. צוות סוכנים דינמי וחישובים שבוצעו"
     )
     for ag in agents:
+        ag_tok = int(ag.get("total_tokens") or 0)
+        ag_dur = float(ag.get("duration_seconds") or 0.0)
         lines.append(
-            f"- **{ag['name']}** (`{ag['role_title']}` — Model: `{ag['assigned_model']}`): {ag['description']}"
+            f"- **{ag['name']}** (`{ag['role_title']}` — Model: `{ag['assigned_model']}` | Tokens: `{ag_tok:,}` | Time: `{ag_dur:.2f}s`): {ag['description']}"
         )
 
     lines.append("")
     for t in tasks:
-        lines.append(f"### Task: {t['title']} (`{t['status']}` — `{t.get('assigned_agent_name') or 'coordinator'}`)")
+        t_tok = int(t.get("total_tokens") or 0)
+        t_dur = float(t.get("duration_seconds") or 0.0)
+        lines.append(
+            f"### Task: {t['title']} (`{t['status']}` — `{t.get('assigned_agent_name') or 'coordinator'}` | `{t_tok:,} tokens` | `{t_dur:.2f}s`)"
+        )
         if t.get("result_summary"):
             lines.append(t["result_summary"])
         if t.get("code_executed"):

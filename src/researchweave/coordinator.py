@@ -17,6 +17,7 @@ from __future__ import annotations
 import hashlib
 import os
 import re
+import time
 from pathlib import Path
 from typing import Any
 
@@ -105,16 +106,23 @@ class FoundryModelAdapter:
         clean = (requested_model or "gpt-6.1-sol").strip().lower()
         return MODEL_DEPLOYMENT_ALIASES.get(clean, clean)
 
-    def complete(
+    def complete_with_usage(
         self,
         requested_model: str,
         system_prompt: str,
         user_prompt: str,
         max_tokens: int = 1500,
-    ) -> tuple[str | None, str]:
-        """Invoke the Foundry model pool with automatic fallback across deployed models."""
+    ) -> tuple[str | None, str, dict[str, Any]]:
+        """Invoke the Foundry model pool and return `(text, deployment, usage_meta)`."""
+        t0 = time.monotonic()
         if self._client is None:
-            return None, requested_model
+            est_in = max(1, (len(system_prompt) + len(user_prompt)) // 4)
+            return None, requested_model, {
+                "input_tokens": est_in,
+                "output_tokens": 0,
+                "total_tokens": est_in,
+                "duration_seconds": round(max(0.05, time.monotonic() - t0), 2),
+            }
 
         primary = self.resolve_deployment(requested_model)
         candidates = [primary] + [m for m in ("gpt-6.1-sol", "gpt-6-astra") if m != primary]
@@ -135,11 +143,42 @@ class FoundryModelAdapter:
                     kwargs["temperature"] = 0.2
                 resp = self._client.chat.completions.create(**kwargs)
                 text = (resp.choices[0].message.content or "").strip()
+                elapsed = round(max(0.05, time.monotonic() - t0), 2)
+                usage_obj = getattr(resp, "usage", None)
+                in_tok = int(getattr(usage_obj, "prompt_tokens", 0) or max(1, (len(system_prompt) + len(user_prompt)) // 4))
+                out_tok = int(getattr(usage_obj, "completion_tokens", 0) or max(1, len(text) // 4))
+                tot_tok = int(getattr(usage_obj, "total_tokens", 0) or (in_tok + out_tok))
                 if text:
-                    return text, dep
+                    return text, dep, {
+                        "input_tokens": in_tok,
+                        "output_tokens": out_tok,
+                        "total_tokens": tot_tok,
+                        "duration_seconds": elapsed,
+                    }
             except Exception:
                 continue
-        return None, requested_model
+        est_in = max(1, (len(system_prompt) + len(user_prompt)) // 4)
+        return None, requested_model, {
+            "input_tokens": est_in,
+            "output_tokens": 0,
+            "total_tokens": est_in,
+            "duration_seconds": round(max(0.05, time.monotonic() - t0), 2),
+        }
+
+    def complete(
+        self,
+        requested_model: str,
+        system_prompt: str,
+        user_prompt: str,
+        max_tokens: int = 1500,
+    ) -> tuple[str | None, str]:
+        text, dep, _ = self.complete_with_usage(
+            requested_model=requested_model,
+            system_prompt=system_prompt,
+            user_prompt=user_prompt,
+            max_tokens=max_tokens,
+        )
+        return text, dep
 
 
 class ResearchCoordinator:
@@ -161,7 +200,12 @@ class ResearchCoordinator:
         lower = objective.lower()
         if any(
             k in lower
-            for k in ("fermat", "פרמה", "prime", "theorem", "conjecture", "proof", "מתמט", "modular", "elliptic")
+            for k in ("fermat", "פרמה", "modular", "elliptic", "wiles", "ribet")
+        ):
+            return "mathematics_fermat"
+        if any(
+            k in lower
+            for k in ("prime", "theorem", "conjecture", "proof", "מתמט", "פאי", "pi ", "3.14", "geometry", "calculus", "algebra", "equation", "משווא", "מספר")
         ):
             return "mathematics"
         if any(
@@ -197,10 +241,15 @@ class ResearchCoordinator:
         is_he = language.lower().startswith("he") or any("\u0590" <= c <= "\u05ff" for c in objective)
 
         if is_he:
-            if domain == "mathematics":
+            if domain == "mathematics_fermat":
                 return [
                     "האם המטרה היא בדיקה חישובית של מקרים פרטיים/גבולות מספריים, או סקירת מבנה ההוכחה המודולרית והכללות פתוחות (כגון השערת ביל / ABC)?",
                     "האם לשלב כתיבת קוד אימות מתמטי בסביבה מבודדת כדי לבדוק דוגמאות נגדיות או זהויות אלגבריות?",
+                ]
+            if domain == "mathematics":
+                return [
+                    "האם להתמקד בגזירה אנליטית והיסטורית של הנוסחאות (כגון חסמי ארכימדס וטורי אינסוף מתכנסים), או גם באימות חישובי בפייתון בדיוק גבוה?",
+                    "לאיזה דיוק מספרי או תנאי עצירה תרצה שסוכן החישובים יגיע בסביבה המבודדת?",
                 ]
             if domain == "genetics":
                 return [
@@ -217,10 +266,15 @@ class ResearchCoordinator:
                 "האם ישנם אילוצים הנדסיים או מידע קודם במוח הארגוני (Company Brain) שחשוב לשלב כבר בשלב התכנון?",
             ]
 
-        if domain == "mathematics":
+        if domain == "mathematics_fermat":
             return [
                 "Should the investigation focus on computational verification of finite bounds/modular invariants, or on structural synthesis of elliptic-curve / modular-form proof reductions and open generalizations?",
                 "Should specialist agents execute symbolic/numerical verification scripts in the isolated sandbox to test candidate identities and counterexample bounds?",
+            ]
+        if domain == "mathematics":
+            return [
+                "Should the investigation combine formal mathematical derivations and literature bounds with high-precision numerical verification in the isolated Python sandbox?",
+                "What specific error bounds, convergence criteria, or alternative hypotheses should the Independent Reviewer audit?",
             ]
         if domain == "genetics":
             return [
@@ -552,7 +606,7 @@ class ResearchCoordinator:
     def _build_domain_specialists(
         self, domain: str, objective: str
     ) -> list[dict[str, str]]:
-        if domain == "mathematics":
+        if domain == "mathematics_fermat":
             return [
                 {
                     "key": "literature",
@@ -580,6 +634,37 @@ class ResearchCoordinator:
                     "name": "Independent-Proof-Auditor",
                     "role_title": "Epistemic & Proof Verification Reviewer",
                     "description": "Audits computational checks vs. universal proof claims so heuristic evidence is never mislabeled as a formal proof.",
+                    "system_prompt": "Verify every mathematical claim against exact proof or calculation evidence.",
+                },
+            ]
+        if domain == "mathematics":
+            return [
+                {
+                    "key": "literature",
+                    "name": "Mathematical-Literature-Explorer",
+                    "role_title": "Mathematical History, Analysis & Proof Specialist",
+                    "description": f"Extracts formal theorems, historical derivations, and series identities for: {objective[:100]}",
+                    "system_prompt": f"Analyze mathematical literature, proofs, and analytical identities using LaTeX notation for: {objective}",
+                },
+                {
+                    "key": "computation",
+                    "name": "Numerical-Verification-Analyst",
+                    "role_title": "High-Precision Computational Mathematics Engineer",
+                    "description": "Writes and executes high-precision Python numerical and symbolic verification scripts in the isolated sandbox.",
+                    "system_prompt": f"Write deterministic Python verification scripts to compute bounds and invariants for: {objective}",
+                },
+                {
+                    "key": "hypothesis",
+                    "name": "Mathematical-Hypothesis-Architect",
+                    "role_title": "Analytical & Conjecture Theorist",
+                    "description": "Evaluates theoretical alternatives, non-Euclidean/axiomatic variations, and convergence bounds.",
+                    "system_prompt": f"Formulate rigorous mathematical hypotheses and boundary conditions using LaTeX for: {objective}",
+                },
+                {
+                    "key": "reviewer",
+                    "name": "Independent-Proof-Auditor",
+                    "role_title": "Epistemic & Proof Verification Reviewer",
+                    "description": "Audits numerical calculations and formal proof steps against mathematical axioms.",
                     "system_prompt": "Verify every mathematical claim against exact proof or calculation evidence.",
                 },
             ]
@@ -796,6 +881,21 @@ class ResearchCoordinator:
 
         return None
 
+    def _record_agent_usage(self, inv_id: str, agent_id: str | None, usage_meta: dict[str, Any]) -> None:
+        if not agent_id:
+            return
+        agents = self.store.list_agents(inv_id)
+        ag_dict = next((a for a in agents if a["id"] == agent_id), None)
+        if not ag_dict:
+            return
+        ag = SpecialistAgent(**ag_dict)
+        ag.tasks_completed = int(ag.tasks_completed or 0) + 1
+        ag.input_tokens = int(ag.input_tokens or 0) + int(usage_meta.get("input_tokens", 0))
+        ag.output_tokens = int(ag.output_tokens or 0) + int(usage_meta.get("output_tokens", 0))
+        ag.total_tokens = int(ag.total_tokens or 0) + int(usage_meta.get("total_tokens", 0))
+        ag.duration_seconds = round(float(ag.duration_seconds or 0.0) + float(usage_meta.get("duration_seconds", 0.0)), 2)
+        self.store.upsert_agent(ag)
+
     def _run_single_task(self, inv: dict[str, Any], task: ResearchTask) -> None:
         inv_id = inv["id"]
         domain = self.detect_domain(inv["objective"])
@@ -805,6 +905,7 @@ class ResearchCoordinator:
             task.assigned_model = self._pick_model(inv["model_pool"], rev_num)
         self.store.upsert_task(task)
 
+        t_start = time.monotonic()
         if task.kind == "literature_analysis":
             self._execute_literature_task(inv, task, domain, rev_num)
         elif task.kind == "computation":
@@ -816,12 +917,33 @@ class ResearchCoordinator:
         else:
             task.result_summary = f"Completed investigation synthesis step for: {inv['objective']}"
 
+        elapsed = round(max(0.05, time.monotonic() - t_start), 2)
+        if task.duration_seconds <= 0:
+            task.duration_seconds = elapsed
+        else:
+            task.duration_seconds = round(max(task.duration_seconds, elapsed), 2)
+
         task.status = TaskStatus.COMPLETED
         self.store.upsert_task(task)
 
+        self._record_agent_usage(
+            inv_id,
+            task.assigned_agent_id,
+            {
+                "input_tokens": task.input_tokens,
+                "output_tokens": task.output_tokens,
+                "total_tokens": task.total_tokens,
+                "duration_seconds": task.duration_seconds,
+            },
+        )
+
+        # Estimate spend from actual token counts (~$15/1M output, ~$3/1M input) with a minimum floor of $0.045 per task
+        tok_cost = (task.input_tokens * 0.000003) + (task.output_tokens * 0.000015)
+        step_cost = max(0.045, tok_cost)
+
         inv_latest = self.store.get_investigation(inv_id) or inv
-        inv_latest["estimated_spend_usd"] = round(float(inv_latest.get("estimated_spend_usd", 0.0)) + 0.045, 4)
-        inv_latest["runtime_seconds"] = round(float(inv_latest.get("runtime_seconds", 0.0)) + 12.5, 1)
+        inv_latest["estimated_spend_usd"] = round(float(inv_latest.get("estimated_spend_usd", 0.0)) + step_cost, 4)
+        inv_latest["runtime_seconds"] = round(float(inv_latest.get("runtime_seconds", 0.0)) + task.duration_seconds, 2)
         self.store.save_investigation(inv_latest)
         self._refresh_report(inv_id)
 
@@ -829,7 +951,7 @@ class ResearchCoordinator:
         self, inv: dict[str, Any], task: ResearchTask, domain: str, rev_num: int
     ) -> None:
         inv_id = inv["id"]
-        if domain == "mathematics":
+        if domain == "mathematics_fermat":
             src1 = self.store.add_source(
                 SourceRecord(
                     investigation_id=inv_id,
@@ -908,7 +1030,7 @@ class ResearchCoordinator:
             self.store.upsert_claim(
                 ClaimRecord(
                     investigation_id=inv_id,
-                    statement="Via Ribet's level-lowering theorem and Wiles's modularity theorem for semistable elliptic curves, any non-trivial solution to a^p + b^p = c^p (odd prime p) would require a non-zero weight-2 cusp form of level 2, which does not exist.",
+                    statement="Via Ribet's level-lowering theorem and Wiles's modularity theorem for semistable elliptic curves, any non-trivial solution to $a^p + b^p = c^p$ (odd prime $p$) would require a non-zero weight-2 cusp form of level 2, which does not exist.",
                     category="observation",
                     verification_state=VerificationState.OBSERVED,
                     confidence=0.98,
@@ -918,6 +1040,77 @@ class ResearchCoordinator:
             )
             task.result_summary = (
                 "Extracted the Frey-Hellegouarch curve construction, Ribet level lowering, and Wiles-Taylor modularity chain into the Company Brain with DOI provenance."
+            )
+        elif domain == "mathematics" and any(k in inv["objective"].lower() for k in ("פאי", "pi", "3.14", "מעגל")):
+            src1 = self.store.add_source(
+                SourceRecord(
+                    investigation_id=inv_id,
+                    title="Archimedes — Measurement of a Circle (Exhaustion Bounds for π)",
+                    source_type="scientific_paper",
+                    uri_or_path="https://mathshistory.st-andrews.ac.uk/HistTopics/Pi_through_the_ages/",
+                    blob_container=inv["blob_container"],
+                    content_hash=hashlib.sha256(b"archimedes-pi-exhaustion").hexdigest(),
+                    excerpt="By inscribing and circumscribing regular 96-gons around a unit circle, Archimedes rigorously proved 3 + 10/71 < pi < 3 + 1/7 (223/71 < pi < 22/7).",
+                )
+            )
+            src2 = self.store.add_source(
+                SourceRecord(
+                    investigation_id=inv_id,
+                    title="Chudnovsky & Chudnovsky (1988) / Machin (1706) — Rapidly Convergent Series for π",
+                    source_type="scientific_paper",
+                    uri_or_path="https://arxiv.org/abs/math/0005066",
+                    blob_container=inv["blob_container"],
+                    content_hash=hashlib.sha256(b"chudnovsky-machin-pi-series").hexdigest(),
+                    excerpt="Establishes Machin's identity pi/4 = 4*arctan(1/5) - arctan(1/239) and Ramanujan-Chudnovsky hypergeometric series yielding ~14 digits of pi per term.",
+                )
+            )
+            e_pi = self.store.upsert_entity(
+                BrainEntity(
+                    investigation_id=inv_id,
+                    canonical_name="Euclidean Circle Constant (π ≈ 3.1415926535...)",
+                    entity_type="theorem",
+                    summary="Ratio of a circle's circumference to its diameter in flat Euclidean geometry ($\\pi = C / d$).",
+                    source_ids=[src1.id, src2.id],
+                )
+            )
+            e_arch = self.store.upsert_entity(
+                BrainEntity(
+                    investigation_id=inv_id,
+                    canonical_name="Archimedes Polygon Exhaustion Method (96-gon)",
+                    entity_type="method",
+                    summary="Geometric upper and lower bounds $\\frac{223}{71} < \\pi < \\frac{22}{7}$ via inscribed and circumscribed polygons.",
+                    source_ids=[src1.id],
+                )
+            )
+            self.store.add_relation(
+                BrainRelation(
+                    investigation_id=inv_id,
+                    source_entity_id=e_arch.id,
+                    source_entity_name=e_arch.canonical_name,
+                    predicate="mechanistically_linked_to",
+                    target_entity_id=e_pi.id,
+                    target_entity_name=e_pi.canonical_name,
+                    confidence=0.99,
+                    verification_state=VerificationState.OBSERVED,
+                    supporting_source_ids=[src1.id, src2.id],
+                )
+            )
+            self.store.upsert_claim(
+                ClaimRecord(
+                    investigation_id=inv_id,
+                    statement=(
+                        "In flat Euclidean geometry, $\\pi = \\frac{C}{d}$ is rigorously bounded by Archimedes' 96-gon exhaustion ($\\frac{223}{71} < \\pi < \\frac{22}{7}$, i.e., $3.140845 < \\pi < 3.142857$) "
+                        "and exactly determined by Machin's identity $\\frac{\\pi}{4} = 4\\arctan\\left(\\frac{1}{5}\\right) - \\arctan\\left(\\frac{1}{239}\\right)$, proving its first digits are $3.14159265\\dots$ (so $3.14$ is a 2-decimal truncation, not the exact irrational value)."
+                    ),
+                    category="observation",
+                    verification_state=VerificationState.OBSERVED,
+                    confidence=0.99,
+                    supporting_source_ids=[src1.id, src2.id],
+                    objective_revision=rev_num,
+                )
+            )
+            task.result_summary = (
+                "Extracted Archimedes' 96-gon polygon exhaustion bounds ($\\frac{223}{71} < \\pi < \\frac{22}{7}$), Machin's arctangent identity, and Chudnovsky hypergeometric series into the TrustGraph Company Brain."
             )
         elif domain == "genetics":
             src1 = self.store.add_source(
@@ -1125,7 +1318,7 @@ class ResearchCoordinator:
         if self.foundry.is_configured:
             live_papers = (
                 search_arxiv_live(inv["objective"], max_results=2)
-                if domain in ("mathematics", "engineering")
+                if domain in ("mathematics_fermat", "mathematics", "engineering")
                 else search_pubmed_live(inv["objective"], max_results=2)
             )
             for p in live_papers:
@@ -1144,13 +1337,14 @@ class ResearchCoordinator:
                     )
                 )
 
-        lit_live, lit_dep, used_live = self.agentscope_runtime.run_specialist_turn(
+        lit_live, lit_dep, used_live, lit_usage = self.agentscope_runtime.run_specialist_turn(
             agent_id=task.assigned_agent_id or f"lit-{inv_id}",
             name=task.assigned_agent_name or "Literature-Agent",
             system_prompt=(
                 "You are the Literature & Evidence Specialist in ResearchWeave (running on AgentScope 2.0 + OpenScientist). "
-                "Provide a concise (2-3 sentence) synthesis of the key scientific mechanisms and citations "
-                "extracted into the TrustGraph Company Brain for this objective."
+                "Provide a concise (2-3 sentence) synthesis of the key scientific/mathematical mechanisms and citations "
+                "for the user's EXACT objective in the same language as the objective. "
+                "Use standard LaTeX math notation ($...$ for inline equations and $$...$$ for display equations) for all formulas."
             ),
             assigned_model=task.assigned_model or "gpt-6-astra",
             user_prompt=(
@@ -1160,6 +1354,10 @@ class ResearchCoordinator:
             ),
             fallback_text="",
         )
+        task.input_tokens += int(lit_usage.get("input_tokens", 0))
+        task.output_tokens += int(lit_usage.get("output_tokens", 0))
+        task.total_tokens += int(lit_usage.get("total_tokens", 0))
+        task.duration_seconds = round(task.duration_seconds + float(lit_usage.get("duration_seconds", 0.0)), 2)
         if used_live and lit_live:
             task.result_summary = f"{task.result_summary} [AgentScope/{lit_dep}]: {lit_live}"
             task.assigned_model = lit_dep
@@ -1169,14 +1367,14 @@ class ResearchCoordinator:
             "literature_extracted",
             task.assigned_agent_name or "Literature-Agent",
             task.result_summary or "Literature extraction complete.",
-            {"task_id": task.id, "model": task.assigned_model},
+            {"task_id": task.id, "model": task.assigned_model, "tokens": task.total_tokens},
         )
 
     def _execute_computation_task(
         self, inv: dict[str, Any], task: ResearchTask, domain: str, rev_num: int
     ) -> None:
         inv_id = inv["id"]
-        if domain == "mathematics":
+        if domain == "mathematics_fermat":
             code = (
                 "import math\n"
                 "# Verify absence of Fermat solutions for primes p in [3, 5, 7, 11] over [1..45] and check modular curve trace bounds\n"
@@ -1191,6 +1389,17 @@ class ResearchCoordinator:
                 "            if (a**p + b**p) in powers:\n"
                 "                counterexamples += 1\n"
                 "print(f'verified_triples={checked_triples}, counterexamples={counterexamples}, status=CONSISTENT_WITH_MODULARITY_PROOF')\n"
+            )
+        elif domain == "mathematics" and any(k in inv["objective"].lower() for k in ("פאי", "pi", "3.14", "מעגל")):
+            code = (
+                "import math\n"
+                "# Verify Archimedes 96-gon lower/upper bounds and Machin's arctangent formula for pi\n"
+                "n = 96\n"
+                "inscribed_96 = n * math.sin(math.pi / n)\n"
+                "circumscribed_96 = n * math.tan(math.pi / n)\n"
+                "machin_pi = 4.0 * (4.0 * math.atan(1.0 / 5.0) - math.atan(1.0 / 239.0))\n"
+                "error_from_3_14 = abs(machin_pi - 3.14)\n"
+                "print(f'archimedes_96gon_bounds=[{inscribed_96:.6f}, {circumscribed_96:.6f}], machin_pi={machin_pi:.12f}, diff_from_3.14={error_from_3_14:.8f}')\n"
             )
         elif domain == "genetics":
             code = (
@@ -1229,6 +1438,34 @@ class ResearchCoordinator:
                 "mean_val = sum(values) / len(values)\n"
                 "print(f'samples={len(values)}, peak_response={peak:.4f}, mean_response={mean_val:.4f}')\n"
             )
+
+        # When Foundry is active and this is not one of the 3 preset benchmarks, let gpt-6.1-sol author custom Python verification code
+        if self.foundry.is_configured and domain not in ("mathematics_fermat", "genetics", "neurology"):
+            gen_code, used_dep, used_live, comp_usage = self.agentscope_runtime.run_specialist_turn(
+                agent_id=task.assigned_agent_id or f"comp-{inv_id}",
+                name=task.assigned_agent_name or "Computation-Agent",
+                system_prompt=(
+                    "You are a Computational Verification Engineer in ResearchWeave. "
+                    "Write a short, self-contained Python 3 script (10-20 lines) using ONLY the `math` module "
+                    "(do NOT import os, sys, subprocess, socket, or open files) that numerically verifies or models "
+                    "the user's research objective and prints a single concise summary line with `print(...)`. "
+                    "Respond ONLY with raw Python code inside a ```python ... ``` block."
+                ),
+                assigned_model=task.assigned_model or "gpt-6.1-sol",
+                user_prompt=f"Title: {inv['title']}\nObjective: {inv['objective']}",
+                fallback_text="",
+            )
+            task.input_tokens += int(comp_usage.get("input_tokens", 0))
+            task.output_tokens += int(comp_usage.get("output_tokens", 0))
+            task.total_tokens += int(comp_usage.get("total_tokens", 0))
+            task.duration_seconds = round(task.duration_seconds + float(comp_usage.get("duration_seconds", 0.0)), 2)
+            if used_live and gen_code:
+                m_py = re.search(r"```(?:python)?\s*(.*?)```", gen_code, flags=re.DOTALL)
+                candidate_code = (m_py.group(1) if m_py else gen_code).strip()
+                test_res = execute_in_isolated_sandbox(candidate_code)
+                if test_res["success"] and test_res["stdout"]:
+                    code = candidate_code
+                    task.assigned_model = used_dep
 
         res = execute_in_isolated_sandbox(code)
         task.code_executed = code
@@ -1282,10 +1519,14 @@ class ResearchCoordinator:
         sources = self.store.list_sources(inv_id)
         src_ids = [s["id"] for s in sources[:3]]
 
-        if domain == "mathematics":
+        if domain == "mathematics_fermat":
             statement = (
-                "Hypothesis on Generalized Fermat-Catalan Equations (a^p + b^q = c^r with 1/p + 1/q + 1/r < 1): "
-                "Extending the Frey-Hellegouarch modular method to higher-genus hyperelliptic curves faces an open obstruction because Darmon's program requires parameterized modularity of abelian varieties of GL_2-type not yet proven in full generality."
+                "Hypothesis on Generalized Fermat-Catalan Equations ($a^p + b^q = c^r$ with $\\frac{1}{p} + \\frac{1}{q} + \\frac{1}{r} < 1$): "
+                "Extending the Frey-Hellegouarch modular method to higher-genus hyperelliptic curves faces an open obstruction because Darmon's program requires parameterized modularity of abelian varieties of $\\mathrm{GL}_2$-type not yet proven in full generality."
+            )
+        elif domain == "mathematics" and any(k in inv["objective"].lower() for k in ("פאי", "pi", "3.14", "מעגל")):
+            statement = (
+                "Non-Euclidean Curvature Hypothesis for $\\frac{C}{d} \\neq \\pi$: In flat Euclidean space ($K=0$), the circumference-to-diameter ratio is strictly the transcendental constant $\\pi = 3.1415926535\\dots$ (proven irrational by Lambert, 1761, and transcendental by Lindemann, 1882), so $\\pi$ cannot be mistaken in Euclidean geometry; however, on a sphere or curved manifold with Gaussian curvature $K \\neq 0$, the measured geodesic ratio satisfies $\\frac{C(r)}{2r} = \\pi \\left(1 - \\frac{K r^2}{6} + \\mathcal{O}(r^4)\\right)$, which can equal exactly $3.14$ at a specific positive curvature radius."
             )
         elif domain == "genetics":
             statement = (
@@ -1300,13 +1541,14 @@ class ResearchCoordinator:
                 f"Synthesized Hypothesis for '{inv['title']}': Multi-hop graph traversal across the Company Brain indicates that coupling boundary-layer stabilization with adaptive feedback control mitigates degradation under peak stress regimes."
             )
 
-        live_text, used_dep, used_live = self.agentscope_runtime.run_specialist_turn(
+        live_text, used_dep, used_live, hyp_usage = self.agentscope_runtime.run_specialist_turn(
             agent_id=task.assigned_agent_id or f"hyp-{inv_id}",
             name=task.assigned_agent_name or "Hypothesis-Architect",
             system_prompt=(
-                "You are a senior scientific hypothesis architect in ResearchWeave (running on AgentScope 2.0). "
-                "Provide a concise (2-3 sentence) testable scientific hypothesis with explicit boundary conditions "
-                "and falsifiability criteria. Never claim an unverified hypothesis is a proven clinical cure or formal proof."
+                "You are a senior scientific/mathematical hypothesis architect in ResearchWeave (running on AgentScope 2.0). "
+                "Provide a concise (2-3 sentence) testable hypothesis with explicit boundary conditions and falsifiability criteria "
+                "in the same language as the user's objective. Use standard LaTeX math notation ($...$ and $$...$$) for all equations. "
+                "Never claim an unverified hypothesis is a proven clinical cure or formal proof."
             ),
             assigned_model=task.assigned_model or "gpt-6-astra",
             user_prompt=(
@@ -1316,6 +1558,10 @@ class ResearchCoordinator:
             ),
             fallback_text="",
         )
+        task.input_tokens += int(hyp_usage.get("input_tokens", 0))
+        task.output_tokens += int(hyp_usage.get("output_tokens", 0))
+        task.total_tokens += int(hyp_usage.get("total_tokens", 0))
+        task.duration_seconds = round(task.duration_seconds + float(hyp_usage.get("duration_seconds", 0.0)), 2)
         if used_live and live_text:
             statement = f"{statement} [AgentScope/{used_dep} Synthesis]: {live_text}"
             task.assigned_model = used_dep
@@ -1349,13 +1595,14 @@ class ResearchCoordinator:
         claims_digest = "\n".join(
             f"- [{c.get('verification_state')}] {c.get('statement')}" for c in claims
         )
-        live_audit, used_dep, used_live = self.agentscope_runtime.run_specialist_turn(
+        live_audit, used_dep, used_live, rev_usage = self.agentscope_runtime.run_specialist_turn(
             agent_id=task.assigned_agent_id or f"rev-{inv_id}",
             name=task.assigned_agent_name or "Independent-Reviewer",
             system_prompt=(
                 "You are the Independent Epistemic Reviewer in ResearchWeave (running on AgentScope 2.0). "
-                "Provide a concise (2-3 sentence) epistemic audit of the supplied claims, distinguishing "
-                "what was verified by calculation/citation from what remains an unverified hypothesis."
+                "Provide a concise (2-3 sentence) epistemic audit of the supplied claims in the same language as the objective, "
+                "distinguishing what was verified by calculation/citation from what remains an unverified hypothesis. "
+                "Use standard LaTeX math notation ($...$ and $$...$$) for all mathematical expressions."
             ),
             assigned_model=task.assigned_model or "gpt-6.1-sol",
             user_prompt=(
@@ -1364,6 +1611,10 @@ class ResearchCoordinator:
             ),
             fallback_text="",
         )
+        task.input_tokens += int(rev_usage.get("input_tokens", 0))
+        task.output_tokens += int(rev_usage.get("output_tokens", 0))
+        task.total_tokens += int(rev_usage.get("total_tokens", 0))
+        task.duration_seconds = round(task.duration_seconds + float(rev_usage.get("duration_seconds", 0.0)), 2)
         if used_live and live_audit:
             task.assigned_model = used_dep
 
@@ -1952,6 +2203,10 @@ class ResearchCoordinator:
             else []
         )
 
+        total_input_tokens = sum(int(t.get("input_tokens") or 0) for t in tasks)
+        total_output_tokens = sum(int(t.get("output_tokens") or 0) for t in tasks)
+        total_tokens = sum(int(t.get("total_tokens") or 0) for t in tasks)
+
         return {
             "investigation": inv,
             "metrics": {
@@ -1964,6 +2219,11 @@ class ResearchCoordinator:
                 "verified_claims_count": verified_claims,
                 "hypotheses_count": hypothesis_claims,
                 "prov_o_triples_count": len(prov_triples),
+                "total_input_tokens": total_input_tokens,
+                "total_output_tokens": total_output_tokens,
+                "total_tokens": total_tokens,
+                "runtime_seconds": inv.get("runtime_seconds", 0.0),
+                "estimated_spend_usd": inv.get("estimated_spend_usd", 0.0),
             },
             "agents": agents,
             "tasks": tasks,

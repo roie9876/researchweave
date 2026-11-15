@@ -56,6 +56,12 @@ class FoundryAgentScopeChatModel(ChatModelBase):  # type: ignore[misc]
         self.foundry_adapter = foundry_adapter
         self.fallback_text = fallback_text
         self.last_used_deployment = model_name
+        self.last_usage: dict[str, Any] = {
+            "input_tokens": 0,
+            "output_tokens": 0,
+            "total_tokens": 0,
+            "duration_seconds": 0.0,
+        }
 
     async def _call_api(
         self,
@@ -85,12 +91,29 @@ class FoundryAgentScopeChatModel(ChatModelBase):  # type: ignore[misc]
         user_prompt = "\n".join(p for p in user_parts if p).strip() or "Execute assigned research step."
 
         target_model = self.model_name or model
-        live_text, used_dep = self.foundry_adapter.complete(
-            target_model,
-            system_prompt=system_prompt,
-            user_prompt=user_prompt,
-            max_tokens=kwargs.get("max_tokens", 1500),
-        )
+        if hasattr(self.foundry_adapter, "complete_with_usage"):
+            live_text, used_dep, usage_meta = self.foundry_adapter.complete_with_usage(
+                target_model,
+                system_prompt=system_prompt,
+                user_prompt=user_prompt,
+                max_tokens=kwargs.get("max_tokens", 1500),
+            )
+            self.last_usage = usage_meta
+        else:
+            live_text, used_dep = self.foundry_adapter.complete(
+                target_model,
+                system_prompt=system_prompt,
+                user_prompt=user_prompt,
+                max_tokens=kwargs.get("max_tokens", 1500),
+            )
+            in_tok = max(1, (len(system_prompt) + len(user_prompt)) // 4)
+            out_tok = max(1, len(live_text or self.fallback_text) // 4)
+            self.last_usage = {
+                "input_tokens": in_tok,
+                "output_tokens": out_tok,
+                "total_tokens": in_tok + out_tok,
+                "duration_seconds": 0.1,
+            }
         self.last_used_deployment = used_dep
         final_text = live_text or self.fallback_text or f"Completed analysis using {used_dep}."
 
@@ -99,7 +122,10 @@ class FoundryAgentScopeChatModel(ChatModelBase):  # type: ignore[misc]
                 content=[TextBlock(text=final_text)],
                 is_last=True,
                 finished_reason=FinishedReason.STOP,
-                usage=ChatUsage(input_tokens=len(user_prompt) // 4, output_tokens=len(final_text) // 4),
+                usage=ChatUsage(
+                    input_tokens=int(self.last_usage.get("input_tokens", 0)),
+                    output_tokens=int(self.last_usage.get("output_tokens", 0)),
+                ),
             )
         return {"text": final_text, "deployment": used_dep}
 
@@ -154,10 +180,10 @@ class AgentScopeTeamRuntime:
         assigned_model: str,
         user_prompt: str,
         fallback_text: str = "",
-    ) -> tuple[str, str, bool]:
+    ) -> tuple[str, str, bool, dict[str, Any]]:
         """Execute a single reasoning turn through the AgentScope 2.0 Agent instance.
 
-        Returns `(response_text, resolved_deployment, used_live_foundry)`.
+        Returns `(response_text, resolved_deployment, used_live_foundry, usage_meta)`.
         """
         if agent_id not in self._live_agents:
             self.spawn_specialist_agent(
@@ -188,20 +214,33 @@ class AgentScopeTeamRuntime:
                     import concurrent.futures
 
                     with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
-                        out_text = pool.submit(lambda: asyncio.run(_invoke())).result(timeout=25.0)
+                        out_text = pool.submit(lambda: asyncio.run(_invoke())).result(timeout=28.0)
                 else:
                     out_text = asyncio.run(_invoke())
 
                 used_live = bool(out_text and out_text != fallback_text)
-                return out_text, chat_model.last_used_deployment, used_live
+                return out_text, chat_model.last_used_deployment, used_live, dict(chat_model.last_usage)
             except Exception:
                 pass
 
-        live_text, used_dep = self.foundry_adapter.complete(
-            assigned_model,
-            system_prompt=system_prompt,
-            user_prompt=user_prompt,
-        )
+        if hasattr(self.foundry_adapter, "complete_with_usage"):
+            live_text, used_dep, usage_meta = self.foundry_adapter.complete_with_usage(
+                assigned_model,
+                system_prompt=system_prompt,
+                user_prompt=user_prompt,
+            )
+        else:
+            live_text, used_dep = self.foundry_adapter.complete(
+                assigned_model,
+                system_prompt=system_prompt,
+                user_prompt=user_prompt,
+            )
+            usage_meta = {
+                "input_tokens": max(1, len(user_prompt) // 4),
+                "output_tokens": max(1, len(live_text or fallback_text) // 4),
+                "total_tokens": max(2, (len(user_prompt) + len(live_text or fallback_text)) // 4),
+                "duration_seconds": 0.1,
+            }
         if live_text:
-            return live_text, used_dep, True
-        return fallback_text, assigned_model, False
+            return live_text, used_dep, True, usage_meta
+        return fallback_text, assigned_model, False, usage_meta

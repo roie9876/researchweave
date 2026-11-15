@@ -91,6 +91,11 @@ class SpecialistAgent(BaseModel):
     inherited_permissions: list[str] = Field(
         default_factory=lambda: ["public_search", "brain_read", "isolated_sandbox"]
     )
+    tasks_completed: int = 0
+    input_tokens: int = 0
+    output_tokens: int = 0
+    total_tokens: int = 0
+    duration_seconds: float = 0.0
     created_at: str = Field(default_factory=utc_now_iso)
 
 
@@ -111,6 +116,10 @@ class ResearchTask(BaseModel):
     result_summary: str | None = None
     code_executed: str | None = None
     code_output: str | None = None
+    input_tokens: int = 0
+    output_tokens: int = 0
+    total_tokens: int = 0
+    duration_seconds: float = 0.0
     created_at: str = Field(default_factory=utc_now_iso)
     updated_at: str = Field(default_factory=utc_now_iso)
 

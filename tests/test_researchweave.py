@@ -299,6 +299,24 @@ class ResearchWeaveAcceptanceTests(unittest.TestCase):
         self.assertEqual(agent_models["Conjecture-Synthesis-Architect"], "gpt-6-astra")
         self.assertEqual(agent_models["Independent-Proof-Auditor"], "gpt-6.1-sol")
 
+        # Verify a general math problem (Pi = 3.14) does NOT leak Fermat's Last Theorem claims
+        pi_bundle = self.app.coordinator.create_investigation(
+            CreateInvestigationRequest(
+                title="כיצד הגיעו לערך של פאי 3.14",
+                objective="אני רוצה שתבצע מחקר כיצד הגיעו במתמטיקה לערך של פאי והאם יכול להיות שיש טעות וזה לא 3.14",
+                language="he",
+                report_language="he",
+            )
+        )
+        pi_done = self.app.coordinator.confirm_and_start(
+            pi_bundle["investigation"]["id"], run_initial_cycle=True
+        )
+        pi_report = pi_done["investigation"]["draft_report_markdown"]
+        self.assertNotIn("Ribet", pi_report)
+        self.assertNotIn("Wiles", pi_report)
+        self.assertIn("223", pi_report)
+        self.assertGreaterEqual(pi_done["metrics"]["total_tokens"], 1)
+
 
 if __name__ == "__main__":
     unittest.main()

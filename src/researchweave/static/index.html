@@ -4,6 +4,9 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>ResearchWeave — Autonomous Scientific & Engineering Research Platform</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css" crossorigin="anonymous" />
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js" crossorigin="anonymous"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js" crossorigin="anonymous"></script>
   <style>
     :root {
       --bg: #0b0f19;
@@ -301,13 +304,56 @@
       background: #090d16;
       border: 1px solid var(--border);
       border-radius: 10px;
-      padding: 18px;
-      white-space: pre-wrap;
-      font-size: 13.5px;
-      max-height: 520px;
+      padding: 20px 24px;
+      font-size: 14px;
+      max-height: 580px;
       overflow-y: auto;
-      line-height: 1.65;
+      line-height: 1.75;
     }
+
+    .report-preview h1, .report-preview h2, .report-preview h3 {
+      color: var(--accent);
+      margin-top: 16px;
+      margin-bottom: 8px;
+      line-height: 1.35;
+    }
+
+    .report-preview h1 { font-size: 20px; border-bottom: 1px solid var(--border); padding-bottom: 8px; margin-top: 0; }
+    .report-preview h2 { font-size: 16.5px; }
+    .report-preview h3 { font-size: 14.5px; color: #93c5fd; }
+    .report-preview ul { padding-inline-start: 22px; margin: 8px 0; }
+    .report-preview li { margin-bottom: 6px; }
+    .report-preview blockquote {
+      border-inline-start: 3px solid var(--accent);
+      padding-inline-start: 12px;
+      color: var(--text-muted);
+      margin: 10px 0;
+    }
+    .report-preview code {
+      background: rgba(56, 189, 248, 0.14);
+      color: #7dd3fc;
+      padding: 1px 6px;
+      border-radius: 4px;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+      font-size: 12.5px;
+    }
+    .report-preview pre {
+      background: #050811;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 12px;
+      overflow-x: auto;
+      margin: 10px 0;
+      direction: ltr;
+      text-align: left;
+    }
+    .report-preview pre code {
+      background: transparent;
+      color: #e2e8f0;
+      padding: 0;
+    }
+    .katex { direction: ltr; unicode-bidi: isolate; font-size: 1.06em; color: #fde68a; }
+    .katex-display { direction: ltr; overflow-x: auto; padding: 6px 0; }
 
     .card-grid {
       display: grid;
@@ -473,8 +519,12 @@
             <div class="value" id="m-val-brain">0 / 0</div>
           </div>
           <div class="metric-box">
-            <div class="label" id="m-lbl-spend">Est. Spend & Runtime</div>
-            <div class="value" id="m-val-spend" style="font-size:17px;">$0.0000</div>
+            <div class="label" id="m-lbl-tokens">Tokens Used (In / Out)</div>
+            <div class="value" id="m-val-tokens" style="font-size:16px;">0</div>
+          </div>
+          <div class="metric-box">
+            <div class="label" id="m-lbl-spend">Measured Time & Spend</div>
+            <div class="value" id="m-val-spend" style="font-size:16px;">0.0s ($0.0000)</div>
           </div>
         </div>
 
@@ -924,8 +974,15 @@ Ambroxol_Analog,1.68,0.44</textarea>
       document.getElementById("m-val-hypotheses").textContent = m.hypotheses_count;
       document.getElementById("m-val-agents").textContent = m.active_agents;
       document.getElementById("m-val-brain").textContent = `${m.entities_count} / ${m.relations_count}`;
+      const totTok = m.total_tokens || 0;
+      const inTok = m.total_input_tokens || 0;
+      const outTok = m.total_output_tokens || 0;
+      const tokEl = document.getElementById("m-val-tokens");
+      if (tokEl) {
+        tokEl.textContent = `${totTok.toLocaleString()} (${inTok.toLocaleString()} in / ${outTok.toLocaleString()} out)`;
+      }
       document.getElementById("m-val-spend").textContent =
-        `$${inv.estimated_spend_usd.toFixed(4)} (${inv.runtime_seconds.toFixed(1)}s)`;
+        `${inv.runtime_seconds.toFixed(2)}s ($${inv.estimated_spend_usd.toFixed(4)})`;
 
       document.getElementById("live-models").value = inv.model_pool.join(", ");
       document.getElementById("live-max-hours").value = inv.stopping_conditions.max_runtime_hours || "";
@@ -938,12 +995,15 @@ Ambroxol_Analog,1.68,0.44</textarea>
         const div = document.createElement("div");
         div.className = `msg ${msg.role}`;
         div.innerHTML = `<strong>${escapeHtml(msg.sender)}</strong> <span style="font-size:11px;color:var(--text-muted);">(${msg.status})</span>\n${escapeHtml(msg.content)}`;
+        renderMathInBox(div);
         chatBox.appendChild(div);
       });
       chatBox.scrollTop = chatBox.scrollHeight;
 
-      // Report
-      document.getElementById("report-content").textContent = inv.draft_report_markdown || "";
+      // Report (formatted Markdown + KaTeX mathematical equation rendering)
+      const repEl = document.getElementById("report-content");
+      repEl.innerHTML = formatMarkdownWithMath(inv.draft_report_markdown || "");
+      renderMathInBox(repEl);
 
       // Agents & Tasks
       const agGrid = document.getElementById("agents-grid");
@@ -951,11 +1011,21 @@ Ambroxol_Analog,1.68,0.44</textarea>
       (bundle.agents || []).forEach(ag => {
         const d = document.createElement("div");
         d.className = "mini-card";
+        const agTok = ag.total_tokens || 0;
+        const agIn = ag.input_tokens || 0;
+        const agOut = ag.output_tokens || 0;
+        const agDur = (ag.duration_seconds || 0).toFixed(2);
+        const agDone = ag.tasks_completed || 0;
         d.innerHTML = `
-          <strong>${escapeHtml(ag.name)}</strong>
-          <div style="font-size:12px;color:var(--accent);">${escapeHtml(ag.role_title)} — Model: ${escapeHtml(ag.assigned_model)}</div>
+          <div style="display:flex;justify-content:space-between;align-items:center;">
+            <strong>${escapeHtml(ag.name)}</strong>
+            <span class="badge ${agDone > 0 ? 'completed' : 'running'}">${agDone} task(s)</span>
+          </div>
+          <div style="font-size:12px;color:var(--accent);margin-top:2px;">${escapeHtml(ag.role_title)} — Model: ${escapeHtml(ag.assigned_model)}</div>
+          <div style="font-size:11.5px;color:#fde68a;margin-top:4px;">⏱ ${agDur}s | 🔢 ${agTok.toLocaleString()} tokens (${agIn.toLocaleString()} in / ${agOut.toLocaleString()} out)</div>
           <p style="margin-top:6px;color:var(--text-muted);">${escapeHtml(ag.description)}</p>
         `;
+        renderMathInBox(d);
         agGrid.appendChild(d);
       });
 
@@ -964,15 +1034,21 @@ Ambroxol_Analog,1.68,0.44</textarea>
       (bundle.tasks || []).forEach(t => {
         const d = document.createElement("div");
         d.className = "mini-card";
+        const tTok = t.total_tokens || 0;
+        const tIn = t.input_tokens || 0;
+        const tOut = t.output_tokens || 0;
+        const tDur = (t.duration_seconds || 0).toFixed(2);
         d.innerHTML = `
           <div style="display:flex;justify-content:space-between;">
             <strong>${escapeHtml(t.title)}</strong>
             <span class="badge ${t.status}">${t.status}</span>
           </div>
           <div style="font-size:12px;color:var(--text-muted);margin:4px 0;">Agent: ${escapeHtml(t.assigned_agent_name || "")} (${escapeHtml(t.assigned_model || "")})</div>
+          <div style="font-size:11.5px;color:#fde68a;margin-bottom:6px;">⏱ ${tDur}s | 🔢 ${tTok.toLocaleString()} tokens (${tIn.toLocaleString()} in / ${tOut.toLocaleString()} out)</div>
           <p>${escapeHtml(t.result_summary || t.description)}</p>
           ${t.code_output ? `<pre style="margin-top:6px;padding:6px;background:#000;border-radius:6px;font-size:11.5px;overflow-x:auto;">${escapeHtml(t.code_output)}</pre>` : ""}
         `;
+        renderMathInBox(d);
         tkGrid.appendChild(d);
       });
 
@@ -1050,6 +1126,7 @@ Ambroxol_Analog,1.68,0.44</textarea>
             ${c.reviewer_notes ? `<br/>Audit: ${escapeHtml(c.reviewer_notes)}` : ""}
           </div>
         `;
+        renderMathInBox(d);
         clmGrid.appendChild(d);
       });
 
@@ -1066,8 +1143,45 @@ Ambroxol_Analog,1.68,0.44</textarea>
           <div style="font-size:11.5px;color:var(--accent);margin:4px 0;">${escapeHtml(s.uri_or_path)}</div>
           <p style="font-size:12px;color:var(--text-muted);">${escapeHtml(s.excerpt || "")}</p>
         `;
+        renderMathInBox(d);
         srcGrid.appendChild(d);
       });
+    }
+
+    function formatMarkdownWithMath(md) {
+      let s = escapeHtml(md);
+      s = s.replace(/```([a-zA-Z0-9_-]*)\n([\s\S]*?)```/g, (_m, _lang, code) => `<pre><code>${code}</code></pre>`);
+      s = s.replace(/^### (.*)$/gm, "<h3>$1</h3>");
+      s = s.replace(/^## (.*)$/gm, "<h2>$1</h2>");
+      s = s.replace(/^# (.*)$/gm, "<h1>$1</h1>");
+      s = s.replace(/^&gt; (.*)$/gm, "<blockquote>$1</blockquote>");
+      s = s.replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>");
+      s = s.replace(/`([^`\n]+)`/g, "<code>$1</code>");
+      s = s.replace(/^\s*- (.*)$/gm, "<li>$1</li>");
+      s = s.replace(/\(223\/71\s*&lt;\s*π\s*&lt;\s*22\/7\)/g, "$$(\\tfrac{223}{71} < \\pi < \\tfrac{22}{7})$$");
+      s = s.replace(/223\/71\s*&lt;\s*π\s*&lt;\s*22\/7/g, "$$\\tfrac{223}{71} < \\pi < \\tfrac{22}{7}$$");
+      s = s.replace(/\n\n+/g, "<br/><br/>");
+      return s;
+    }
+
+    function renderMathInBox(el) {
+      if (!el || typeof window.renderMathInElement !== "function") return;
+      try {
+        el.innerHTML = el.innerHTML.replace(/(\$\$[\s\S]*?\$\$|\$[^$\n]+\$|\\\([\s\S]*?\\\)|\\\[[\s\S]*?\\\])/g, m =>
+          m.replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&amp;/g, "&")
+        );
+        window.renderMathInElement(el, {
+          delimiters: [
+            { left: "$$", right: "$$", display: true },
+            { left: "\\[", right: "\\]", display: true },
+            { left: "\\(", right: "\\)", display: false },
+            { left: "$", right: "$", display: false }
+          ],
+          throwOnError: false
+        });
+      } catch (e) {
+        // Ignore math render errors
+      }
     }
 
     function escapeHtml(str) {

@@ -162,6 +162,30 @@ spec:
               value: "${AZURE_OPENAI_ENDPOINT}"
             - name: MODEL_POOL_DEFAULT
               value: "gpt-6.1-sol,gpt-6-astra"
+            - name: ENTRA_TENANT_ID
+              valueFrom:
+                secretKeyRef:
+                  name: researchweave-entra-auth
+                  key: ENTRA_TENANT_ID
+                  optional: true
+            - name: ENTRA_TENANT_DOMAIN
+              valueFrom:
+                secretKeyRef:
+                  name: researchweave-entra-auth
+                  key: ENTRA_TENANT_DOMAIN
+                  optional: true
+            - name: ENTRA_CLIENT_ID
+              valueFrom:
+                secretKeyRef:
+                  name: researchweave-entra-auth
+                  key: ENTRA_CLIENT_ID
+                  optional: true
+            - name: ENTRA_CLIENT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: researchweave-entra-auth
+                  key: ENTRA_CLIENT_SECRET
+                  optional: true
           resources:
             requests:
               cpu: "1000m"

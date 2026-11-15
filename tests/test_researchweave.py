@@ -196,6 +196,24 @@ class ResearchWeaveAcceptanceTests(unittest.TestCase):
             with urlopen(f"{base}/api/health") as resp:
                 health = json.loads(resp.read().decode("utf-8"))
                 self.assertEqual(health["status"], "healthy")
+                self.assertEqual(health["entra_tenant_id"], "9dce4dc6-16c7-48c4-9f57-52897cc5a893")
+                self.assertEqual(health["entra_client_id"], "ae19de67-68f0-4b4f-ae41-78bf928e57b9")
+
+            with urlopen(f"{base}/api/auth/config") as resp:
+                auth_cfg = json.loads(resp.read().decode("utf-8"))
+                self.assertTrue(auth_cfg["enabled"])
+                self.assertEqual(auth_cfg["tenant_domain"], "MngEnvMCAP338326.onmicrosoft.com")
+
+            entra_login_req = Request(
+                f"{base}/api/auth/tenant-session",
+                data=json.dumps({"upn": "robenhai@MngEnvMCAP338326.onmicrosoft.com"}).encode("utf-8"),
+                headers={"Content-Type": "application/json"},
+                method="POST",
+            )
+            with urlopen(entra_login_req) as resp:
+                entra_res = json.loads(resp.read().decode("utf-8"))
+                self.assertEqual(entra_res["status"], "authenticated")
+                self.assertEqual(entra_res["user"]["tid"], "9dce4dc6-16c7-48c4-9f57-52897cc5a893")
 
             # Guardrail check: illegal objective must be rejected with HTTP 400
             bad_req = Request(

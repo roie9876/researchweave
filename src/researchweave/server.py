@@ -14,6 +14,7 @@ from urllib.parse import parse_qs, urlparse
 from .blob_store import ResearchBlobStore
 from .brain import ResearchWeaveStore
 from .coordinator import ResearchCoordinator
+from .entra_auth import TENANT_DIRECTORY_USERS, EntraAuthManager
 from .models import (
     ClarifyConfirmRequest,
     CreateInvestigationRequest,
@@ -37,6 +38,21 @@ class ResearchWeaveApp:
         self.store = ResearchWeaveStore(self.db_path)
         self.blob_store = ResearchBlobStore(self.blob_dir)
         self.coordinator = ResearchCoordinator(self.store, self.blob_store)
+        self.entra_auth = EntraAuthManager()
+        # Pre-seed approved users from the configured Microsoft Entra tenant directory
+        for u in TENANT_DIRECTORY_USERS:
+            if u.get("upn"):
+                self.store.approve_user(
+                    email=u["upn"],
+                    role=u.get("role", "entra_member"),
+                    approved_by=f"entra-tenant-{self.entra_auth.tenant_id}",
+                )
+            if u.get("mail"):
+                self.store.approve_user(
+                    email=u["mail"],
+                    role=u.get("role", "entra_member"),
+                    approved_by=f"entra-tenant-{self.entra_auth.tenant_id}",
+                )
 
 
 def create_http_handler(app: ResearchWeaveApp) -> type[BaseHTTPRequestHandler]:
@@ -46,14 +62,33 @@ def create_http_handler(app: ResearchWeaveApp) -> type[BaseHTTPRequestHandler]:
             if os.getenv("RESEARCHWEAVE_VERBOSE_LOG") == "1":
                 super().log_message(format, *args)
 
-        def _send_json(self, payload: Any, status: int = 200) -> None:
+        def _send_json(self, payload: Any, status: int = 200, extra_headers: dict[str, str] | None = None) -> None:
             body = json.dumps(payload, ensure_ascii=False).encode("utf-8")
             self.send_response(status)
             self.send_header("Content-Type", "application/json; charset=utf-8")
             self.send_header("Content-Length", str(len(body)))
             self.send_header("Cache-Control", "no-store")
+            if extra_headers:
+                for hk, hv in extra_headers.items():
+                    self.send_header(hk, hv)
             self.end_headers()
             self.wfile.write(body)
+
+        def _get_current_entra_user(self) -> dict[str, Any] | None:
+            auth_hdr = self.headers.get("Authorization", "")
+            if auth_hdr.lower().startswith("bearer "):
+                tok = auth_hdr[7:].strip()
+                verified = app.entra_auth.verify_session_token(tok)
+                if verified:
+                    return verified
+            cookie_hdr = self.headers.get("Cookie", "")
+            for part in cookie_hdr.split(";"):
+                kv = part.strip().split("=", 1)
+                if len(kv) == 2 and kv[0] == "rw_entra_session":
+                    verified = app.entra_auth.verify_session_token(kv[1].strip())
+                    if verified:
+                        return verified
+            return None
 
         def _send_bytes(
             self,
@@ -103,6 +138,9 @@ def create_http_handler(app: ResearchWeaveApp) -> type[BaseHTTPRequestHandler]:
                                 "gpt-6.1-sol",
                                 "gpt-6-astra",
                             ],
+                            "entra_tenant_id": app.entra_auth.tenant_id,
+                            "entra_tenant_domain": app.entra_auth.tenant_domain,
+                            "entra_client_id": app.entra_auth.client_id,
                             "foundry_configured": app.coordinator.foundry.is_configured,
                             "foundry_endpoint": app.coordinator.foundry.endpoint or None,
                             "blob_storage_connected": app.blob_store._blob_service_client is not None,
@@ -115,6 +153,50 @@ def create_http_handler(app: ResearchWeaveApp) -> type[BaseHTTPRequestHandler]:
                             },
                         }
                     )
+                    return
+
+                if path == "/api/auth/config":
+                    user = self._get_current_entra_user()
+                    self._send_json(app.entra_auth.get_public_config(current_user=user))
+                    return
+
+                if path == "/api/auth/login":
+                    host = self.headers.get("Host", "localhost:8080")
+                    proto = self.headers.get("X-Forwarded-Proto", "http")
+                    redirect_uri = (query.get("redirect_uri") or [f"{proto}://{host}/api/auth/callback"])[0]
+                    auth_url = app.entra_auth.build_authorize_redirect(redirect_uri)
+                    self.send_response(302)
+                    self.send_header("Location", auth_url)
+                    self.end_headers()
+                    return
+
+                if path == "/api/auth/callback":
+                    err = (query.get("error") or [""])[0]
+                    if err:
+                        err_desc = (query.get("error_description") or [err])[0]
+                        self._send_json({"error": err, "error_description": err_desc}, 400)
+                        return
+                    code = (query.get("code") or [""])[0]
+                    state = (query.get("state") or [""])[0]
+                    host = self.headers.get("Host", "localhost:8080")
+                    proto = self.headers.get("X-Forwarded-Proto", "http")
+                    fallback_redirect = f"{proto}://{host}/api/auth/callback"
+                    user_info = app.entra_auth.exchange_authorization_code(code, state, fallback_redirect)
+                    for addr in (user_info.get("upn"), user_info.get("mail")):
+                        if addr:
+                            app.store.approve_user(
+                                email=addr,
+                                role="entra_member",
+                                approved_by=f"entra-oidc-{app.entra_auth.tenant_id}",
+                            )
+                    session_tok = app.entra_auth.issue_session_token(user_info)
+                    self.send_response(302)
+                    self.send_header(
+                        "Set-Cookie",
+                        f"rw_entra_session={session_tok}; Path=/; Max-Age=43200; SameSite=Lax",
+                    )
+                    self.send_header("Location", "/")
+                    self.end_headers()
                     return
 
                 if path == "/api/users":
@@ -203,6 +285,73 @@ def create_http_handler(app: ResearchWeaveApp) -> type[BaseHTTPRequestHandler]:
             path = parsed.path
             try:
                 body = self._read_json_body()
+
+                if path == "/api/auth/device/start":
+                    flow = app.entra_auth.start_device_code_flow()
+                    self._send_json(flow)
+                    return
+
+                if path == "/api/auth/device/poll":
+                    flow_id = body.get("flow_id", "")
+                    res = app.entra_auth.poll_device_code_flow(flow_id)
+                    if res.get("status") == "authenticated" and res.get("user"):
+                        user_info = res["user"]
+                        for addr in (user_info.get("upn"), user_info.get("mail")):
+                            if addr:
+                                app.store.approve_user(
+                                    email=addr,
+                                    role="entra_member",
+                                    approved_by=f"entra-device-{app.entra_auth.tenant_id}",
+                                )
+                        session_tok = app.entra_auth.issue_session_token(user_info)
+                        res["session_token"] = session_tok
+                        res["user"] = app.entra_auth.verify_session_token(session_tok)
+                        self._send_json(
+                            res,
+                            200,
+                            extra_headers={
+                                "Set-Cookie": f"rw_entra_session={session_tok}; Path=/; Max-Age=43200; SameSite=Lax"
+                            },
+                        )
+                        return
+                    self._send_json(res)
+                    return
+
+                if path == "/api/auth/tenant-session":
+                    upn = body.get("upn")
+                    entra_jwt = body.get("entra_jwt")
+                    user_info = app.entra_auth.authenticate_tenant_user_or_token(upn=upn, entra_jwt=entra_jwt)
+                    for addr in (user_info.get("upn"), user_info.get("mail")):
+                        if addr:
+                            app.store.approve_user(
+                                email=addr,
+                                role=user_info.get("role", "entra_member"),
+                                approved_by=f"entra-tenant-{app.entra_auth.tenant_id}",
+                            )
+                    session_tok = app.entra_auth.issue_session_token(user_info)
+                    verified = app.entra_auth.verify_session_token(session_tok)
+                    self._send_json(
+                        {
+                            "status": "authenticated",
+                            "session_token": session_tok,
+                            "user": verified,
+                        },
+                        200,
+                        extra_headers={
+                            "Set-Cookie": f"rw_entra_session={session_tok}; Path=/; Max-Age=43200; SameSite=Lax"
+                        },
+                    )
+                    return
+
+                if path == "/api/auth/logout":
+                    self._send_json(
+                        {"status": "logged_out"},
+                        200,
+                        extra_headers={
+                            "Set-Cookie": "rw_entra_session=; Path=/; Max-Age=0; SameSite=Lax"
+                        },
+                    )
+                    return
 
                 if path == "/api/users/approve":
                     email = body.get("email", "")

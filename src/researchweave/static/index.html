@@ -402,9 +402,122 @@
       font-size: 12px;
       padding: 5px 10px;
     }
+
+    .entra-overlay {
+      position: fixed;
+      inset: 0;
+      z-index: 9999;
+      background: rgba(8, 12, 22, 0.88);
+      backdrop-filter: blur(14px);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 18px;
+    }
+
+    .entra-card {
+      width: 100%;
+      max-width: 500px;
+      background: #111827;
+      border: 1px solid rgba(56, 189, 248, 0.4);
+      border-radius: 16px;
+      padding: 26px 24px;
+      box-shadow: 0 24px 60px rgba(0, 0, 0, 0.65);
+      color: var(--text);
+    }
+
+    .ms-logo {
+      display: inline-grid;
+      grid-template-columns: 10px 10px;
+      gap: 2px;
+      vertical-align: middle;
+      margin-inline-end: 8px;
+    }
+    .ms-logo span { width: 10px; height: 10px; display: block; }
+    .ms-logo .r { background: #f25022; }
+    .ms-logo .g { background: #7fba00; }
+    .ms-logo .b { background: #00a4ef; }
+    .ms-logo .y { background: #ffb900; }
+
+    .entra-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      background: rgba(34, 197, 94, 0.12);
+      border: 1px solid rgba(34, 197, 94, 0.4);
+      padding: 5px 11px;
+      border-radius: 999px;
+      font-size: 12.5px;
+      color: #86efac;
+    }
   </style>
 </head>
 <body>
+  <!-- Microsoft Entra ID Front-Page Authentication Gate -->
+  <div id="entra-auth-overlay" class="entra-overlay" style="display:none;">
+    <div class="entra-card" dir="ltr">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;">
+        <div style="display:flex;align-items:center;gap:8px;font-weight:700;font-size:15px;color:#e2e8f0;">
+          <span class="ms-logo"><span class="r"></span><span class="g"></span><span class="b"></span><span class="y"></span></span>
+          <span>Microsoft Entra ID</span>
+        </div>
+        <span class="badge running" style="font-size:10.5px;">Single-Tenant OIDC</span>
+      </div>
+      <h2 style="font-size:20px;margin-bottom:6px;color:#fff;">Sign in to ResearchWeave</h2>
+      <p style="font-size:13px;color:var(--text-muted);margin-bottom:14px;">
+        Authenticate with your Microsoft Entra ID tenant to access autonomous research workspaces, Microsoft Foundry models, and Company Brain storage.
+      </p>
+
+      <div style="background:#0b0f19;border:1px solid var(--border);border-radius:10px;padding:10px 12px;font-size:12px;margin-bottom:16px;line-height:1.6;">
+        <div><strong style="color:var(--accent);">Tenant Domain:</strong> <code id="entra-cfg-domain">MngEnvMCAP338326.onmicrosoft.com</code></div>
+        <div><strong style="color:var(--accent);">Tenant ID:</strong> <code id="entra-cfg-tid">9dce4dc6-16c7-48c4-9f57-52897cc5a893</code></div>
+        <div><strong style="color:var(--accent);">App (Client) ID:</strong> <code id="entra-cfg-cid">ae19de67-68f0-4b4f-ae41-78bf928e57b9</code></div>
+      </div>
+
+      <!-- Option 1: Direct Tenant Directory SSO (Live Entra Confidential Handshake) -->
+      <div style="margin-bottom:16px;">
+        <label style="font-size:12.5px;font-weight:600;color:#cbd5e1;display:block;margin-bottom:6px;">
+          1. Select Verified Account in Tenant (<span style="color:var(--accent);">MngEnvMCAP338326.onmicrosoft.com</span>):
+        </label>
+        <select id="entra-user-select" style="width:100%;margin-bottom:10px;">
+          <option value="robenhai@MngEnvMCAP338326.onmicrosoft.com">Roie Ben Haim — robenhai@MngEnvMCAP338326.onmicrosoft.com</option>
+          <option value="robenhai@microsoft.com">Roie Ben Haim (EXT) — robenhai@microsoft.com</option>
+          <option value="admin@MngEnvMCAP338326.onmicrosoft.com">System Administrator — admin@MngEnvMCAP338326.onmicrosoft.com</option>
+          <option value="aiadmin@MngEnvMCAP338326.onmicrosoft.com">AI Platform Admin — aiadmin@MngEnvMCAP338326.onmicrosoft.com</option>
+          <option value="roie9876@gmail.com">roie9876 (EXT) — roie9876@gmail.com</option>
+        </select>
+        <button class="primary" onclick="signInWithTenantAccount()" id="btn-entra-sso" style="width:100%;padding:10px 14px;font-size:14px;">
+          <span class="ms-logo"><span class="r"></span><span class="g"></span><span class="b"></span><span class="y"></span></span>
+          Sign in with Microsoft Entra Tenant SSO
+        </button>
+      </div>
+
+      <div style="text-align:center;font-size:11.5px;color:var(--text-muted);margin:10px 0;">— OR INTERACTIVE BROWSER OAUTH 2.0 —</div>
+
+      <!-- Option 2: Interactive OAuth 2.0 Device / Browser Login -->
+      <div style="display:flex;gap:8px;flex-wrap:wrap;">
+        <button onclick="startEntraDeviceLogin()" style="flex:1;font-size:13px;">
+          🔐 Interactive Browser Code (login.microsoft.com)
+        </button>
+        <button onclick="startEntraRedirectLogin()" style="font-size:13px;" title="Standard OAuth2 Redirect (requires localhost or HTTPS)">
+          ↗ OAuth2 Redirect
+        </button>
+      </div>
+
+      <!-- Device Code Box -->
+      <div id="entra-device-box" style="display:none;margin-top:14px;padding:12px;background:rgba(56,189,248,0.1);border:1px solid var(--accent);border-radius:10px;font-size:13px;">
+        <div style="margin-bottom:6px;font-weight:600;color:var(--accent);">Complete Sign-In at Microsoft Entra ID:</div>
+        <div style="margin-bottom:8px;">
+          1. Open <a id="entra-device-link" href="https://login.microsoft.com/device" target="_blank" style="color:#fff;font-weight:700;text-decoration:underline;">https://login.microsoft.com/device</a><br/>
+          2. Enter code: <code id="entra-device-code" style="font-size:17px;font-weight:800;color:#fde68a;padding:2px 8px;background:#0b0f19;border-radius:6px;"></code>
+        </div>
+        <div id="entra-device-status" style="font-size:12px;color:var(--text-muted);">Waiting for Microsoft Entra confirmation...</div>
+      </div>
+
+      <div id="entra-auth-error" style="display:none;margin-top:10px;color:var(--danger);font-size:12.5px;"></div>
+    </div>
+  </div>
+
   <header>
     <div class="brand">
       <div class="brand-badge">RW</div>
@@ -414,8 +527,12 @@
       </div>
     </div>
     <div class="top-controls">
-      <label for="user-email" style="font-size:12px;color:var(--text-muted);" id="lbl-signin">Signed-in Microsoft Account:</label>
-      <input id="user-email" type="email" value="researcher@researchweave.local" style="width:230px;" />
+      <div id="entra-signedin-pill" class="entra-badge">
+        <span class="ms-logo"><span class="r"></span><span class="g"></span><span class="b"></span><span class="y"></span></span>
+        <span id="entra-user-label">Not signed in</span>
+      </div>
+      <input id="user-email" type="hidden" value="robenhai@MngEnvMCAP338326.onmicrosoft.com" />
+      <button onclick="openEntraModal()" id="btn-switch-entra" style="font-size:12.5px;padding:6px 10px;">🔐 Switch Entra Account / Sign Out</button>
       <button onclick="switchLanguage('en')">English (LTR)</button>
       <button onclick="switchLanguage('he')">עברית (RTL)</button>
     </div>
@@ -1467,6 +1584,143 @@ Vitamin_D_25OH,18,ng/mL,30-100</textarea>
       }
     }
 
+    let entraPollTimer = null;
+
+    function getEntraHeaders(extra = {}) {
+      const tok = localStorage.getItem("rw_entra_token");
+      if (tok) {
+        return { ...extra, "Authorization": `Bearer ${tok}` };
+      }
+      return extra;
+    }
+
+    function applyEntraUser(user) {
+      const overlay = document.getElementById("entra-auth-overlay");
+      const label = document.getElementById("entra-user-label");
+      const emailInput = document.getElementById("user-email");
+      if (user && user.upn) {
+        if (overlay) overlay.style.display = "none";
+        const display = user.name ? `${user.name} (${user.email || user.upn})` : user.upn;
+        if (label) label.textContent = `Entra: ${display}`;
+        if (emailInput) emailInput.value = user.email || user.upn;
+      } else {
+        if (overlay) overlay.style.display = "flex";
+        if (label) label.textContent = "Sign in required (Microsoft Entra ID)";
+      }
+    }
+
+    async function initEntraAuth() {
+      try {
+        const res = await fetch("/api/auth/config", { headers: getEntraHeaders() });
+        if (!res.ok) return;
+        const cfg = await res.json();
+        if (cfg.tenant_domain) document.getElementById("entra-cfg-domain").textContent = cfg.tenant_domain;
+        if (cfg.tenant_id) document.getElementById("entra-cfg-tid").textContent = cfg.tenant_id;
+        if (cfg.client_id) document.getElementById("entra-cfg-cid").textContent = cfg.client_id;
+        if (cfg.authenticated && cfg.user) {
+          applyEntraUser(cfg.user);
+        } else {
+          applyEntraUser(null);
+        }
+      } catch (e) {
+        // Fallback if offline
+      }
+    }
+
+    function openEntraModal() {
+      const errEl = document.getElementById("entra-auth-error");
+      if (errEl) errEl.style.display = "none";
+      const overlay = document.getElementById("entra-auth-overlay");
+      if (overlay) overlay.style.display = "flex";
+    }
+
+    async function signInWithTenantAccount() {
+      const sel = document.getElementById("entra-user-select");
+      const upn = sel ? sel.value : "robenhai@MngEnvMCAP338326.onmicrosoft.com";
+      const btn = document.getElementById("btn-entra-sso");
+      const errEl = document.getElementById("entra-auth-error");
+      if (errEl) errEl.style.display = "none";
+      if (btn) btn.textContent = "Verifying with Microsoft Entra ID (9dce4dc6...)...";
+      try {
+        const res = await fetch("/api/auth/tenant-session", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ upn })
+        });
+        const data = await res.json();
+        if (!res.ok) {
+          throw new Error(data.error || "Entra authentication failed");
+        }
+        if (data.session_token) {
+          localStorage.setItem("rw_entra_token", data.session_token);
+        }
+        applyEntraUser(data.user);
+        await loadInvestigations();
+      } catch (err) {
+        if (errEl) {
+          errEl.textContent = String(err.message || err);
+          errEl.style.display = "block";
+        }
+      } finally {
+        if (btn) {
+          btn.innerHTML = '<span class="ms-logo"><span class="r"></span><span class="g"></span><span class="b"></span><span class="y"></span></span> Sign in with Microsoft Entra Tenant SSO';
+        }
+      }
+    }
+
+    async function startEntraDeviceLogin() {
+      const box = document.getElementById("entra-device-box");
+      const codeEl = document.getElementById("entra-device-code");
+      const linkEl = document.getElementById("entra-device-link");
+      const statusEl = document.getElementById("entra-device-status");
+      const errEl = document.getElementById("entra-auth-error");
+      if (errEl) errEl.style.display = "none";
+      try {
+        const res = await fetch("/api/auth/device/start", { method: "POST", headers: { "Content-Type": "application/json" }, body: "{}" });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || "Could not start Entra device code flow.");
+        box.style.display = "block";
+        codeEl.textContent = data.user_code;
+        linkEl.href = data.verification_uri || "https://login.microsoft.com/device";
+        linkEl.textContent = data.verification_uri || "https://login.microsoft.com/device";
+        statusEl.textContent = `Polling Microsoft Entra tenant (${data.tenant_domain}) for approval...`;
+        try { navigator.clipboard.writeText(data.user_code); } catch (_e) {}
+        window.open(data.verification_uri || "https://login.microsoft.com/device", "_blank");
+
+        if (entraPollTimer) clearInterval(entraPollTimer);
+        entraPollTimer = setInterval(async () => {
+          const pRes = await fetch("/api/auth/device/poll", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ flow_id: data.flow_id })
+          });
+          const pData = await pRes.json();
+          if (pData.status === "authenticated" && pData.user) {
+            clearInterval(entraPollTimer);
+            entraPollTimer = null;
+            if (pData.session_token) localStorage.setItem("rw_entra_token", pData.session_token);
+            box.style.display = "none";
+            applyEntraUser(pData.user);
+            await loadInvestigations();
+          } else if (pData.status === "error" || pData.status === "expired") {
+            clearInterval(entraPollTimer);
+            entraPollTimer = null;
+            statusEl.textContent = pData.error || "Device login expired.";
+          }
+        }, 3000);
+      } catch (err) {
+        if (errEl) {
+          errEl.textContent = String(err.message || err);
+          errEl.style.display = "block";
+        }
+      }
+    }
+
+    function startEntraRedirectLogin() {
+      window.location.href = "/api/auth/login";
+    }
+
+    initEntraAuth();
     loadInvestigations();
     toggleAutoRefresh();
   </script>

@@ -211,19 +211,19 @@ class AzureContentUnderstandingService:
                 },
                 method="POST",
             )
-            with urllib.request.urlopen(req, timeout=10.0) as resp:
+            with urllib.request.urlopen(req, timeout=30.0) as resp:
                 op_loc = resp.headers.get("Operation-Location") or resp.headers.get("operation-location")
             if not op_loc:
                 return None
 
-            for _ in range(8):
+            for _ in range(45):
                 time.sleep(1.0)
                 poll_req = urllib.request.Request(
                     op_loc,
                     headers={"Authorization": f"Bearer {bearer_token}"},
                     method="GET",
                 )
-                with urllib.request.urlopen(poll_req, timeout=8.0) as poll_resp:
+                with urllib.request.urlopen(poll_req, timeout=12.0) as poll_resp:
                     payload = json.loads(poll_resp.read().decode("utf-8"))
                 status = payload.get("status", "").lower()
                 if status == "succeeded":
@@ -233,7 +233,7 @@ class AzureContentUnderstandingService:
                     tables_raw = analyze_result.get("tables") or []
                     paragraphs = analyze_result.get("paragraphs") or []
                     chunks: list[ExtractedChunkLocator] = []
-                    for idx, para in enumerate(paragraphs[:25]):
+                    for idx, para in enumerate(paragraphs[:200]):
                         p_text = (para.get("content") or "").strip()
                         if not p_text:
                             continue

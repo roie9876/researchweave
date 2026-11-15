@@ -1790,6 +1790,11 @@ class ResearchCoordinator:
 
         # When Foundry is active and this is not one of the 3 preset benchmarks, let gpt-6.1-sol author custom Python verification code
         if self.foundry.is_configured and domain not in ("mathematics_fermat", "genetics", "neurology"):
+            uploaded_for_comp = "\n".join(
+                f"- [{s['id']}] {s['title']}:\n{s.get('excerpt', '')[:4000]}"
+                for s in self.store.list_sources(inv_id)
+                if s.get("source_type") == "uploaded_file"
+            )
             gen_code, used_dep, used_live, comp_usage = self.agentscope_runtime.run_specialist_turn(
                 agent_id=task.assigned_agent_id or f"comp-{inv_id}",
                 name=task.assigned_agent_name or "Computation-Agent",
@@ -1803,7 +1808,8 @@ class ResearchCoordinator:
                 assigned_model=task.assigned_model or "gpt-6.1-sol",
                 user_prompt=(
                     f"Title: {inv['title']}\nObjective: {inv['objective']}\n"
-                    + (f"Iteration Focus: {task.description}" if task.title.startswith("[Iteration ") else "")
+                    + (f"Iteration Focus: {task.description}\n" if task.title.startswith("[Iteration ") else "")
+                    + (f"Uploaded PDF / Document Measurements:\n{uploaded_for_comp}\n" if uploaded_for_comp else "")
                 ),
                 fallback_text="",
             )
@@ -2002,7 +2008,8 @@ class ResearchCoordinator:
         auditor_sources = (cited_sources + remaining_sources)[:30]
 
         sources_digest = "\n".join(
-            f"- [{s.get('id')}] {s.get('title')} ({s.get('uri_or_path')}): {s.get('excerpt', '')[:250]}"
+            f"- [{s.get('id')}] {s.get('title')} ({s.get('uri_or_path')}): "
+            f"{s.get('excerpt', '')[:4000] if s.get('source_type') == 'uploaded_file' else s.get('excerpt', '')[:600]}"
             for s in auditor_sources
         )
         sandbox_digest = "\n".join(
@@ -2373,7 +2380,7 @@ class ResearchCoordinator:
                 blob_container=artifact["container_name"],
                 blob_name=artifact["blob_name"],
                 content_hash=artifact["sha256"],
-                excerpt=cu_result.markdown_content[:400],
+                excerpt=cu_result.markdown_content[:16000],
                 metadata={
                     "size_bytes": artifact["size_bytes"],
                     "uploaded_by": uploaded_by,

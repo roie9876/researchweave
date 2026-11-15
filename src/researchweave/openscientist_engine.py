@@ -242,13 +242,18 @@ def _parse_pubmed_xml(xml_text: str) -> list[dict[str, Any]]:
 
 
 def search_arxiv_live(query: str, max_results: int = 3, timeout: float = 5.0) -> list[dict[str, Any]]:
-    """Search ArXiv Atom API for mathematics, physics, computer science, and quantitative biology papers."""
-    clean_q = re.sub(r"[^\w\s-]", " ", query).strip()
-    words = [w for w in clean_q.split() if len(w) > 2][:6]
+    """Search ArXiv Atom API for mathematics, physics, astronomy, computer science, and quantitative biology papers."""
+    # Extract ASCII / English scientific terms first so Hebrew prompts with English acronyms (e.g. JWST, DESI, Lambda-CDM) work cleanly
+    ascii_tokens = re.findall(r"[A-Za-z][A-Za-z0-9_-]{2,24}", query)
+    if ascii_tokens:
+        words = ascii_tokens[:5]
+    else:
+        clean_q = re.sub(r"[^\w\s-]", " ", query).strip()
+        words = [w for w in clean_q.split() if len(w) > 2][:5]
     if not words:
         return []
     search_query = "+AND+".join(f"all:{urllib.parse.quote(w)}" for w in words)
-    url = f"http://export.arxiv.org/api/query?search_query={search_query}&start=0&max_results={max_results}"
+    url = f"https://export.arxiv.org/api/query?search_query={search_query}&start=0&max_results={max_results}"
     try:
         req = urllib.request.Request(
             url, headers={"User-Agent": "ResearchWeave-OpenScientist/0.2"}

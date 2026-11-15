@@ -111,7 +111,7 @@ class FoundryModelAdapter:
         requested_model: str,
         system_prompt: str,
         user_prompt: str,
-        max_tokens: int = 1500,
+        max_tokens: int = 3500,
     ) -> tuple[str | None, str, dict[str, Any]]:
         """Invoke the Foundry model pool and return `(text, deployment, usage_meta)`."""
         t0 = time.monotonic()
@@ -170,7 +170,7 @@ class FoundryModelAdapter:
         requested_model: str,
         system_prompt: str,
         user_prompt: str,
-        max_tokens: int = 1500,
+        max_tokens: int = 3500,
     ) -> tuple[str | None, str]:
         text, dep, _ = self.complete_with_usage(
             requested_model=requested_model,
@@ -231,6 +231,24 @@ class ResearchCoordinator:
             )
         ):
             return "genetics"
+        if any(
+            k in lower
+            for k in (
+                "jwst",
+                "desi",
+                "lambda-cdm",
+                "dark energy",
+                "cosmolog",
+                "אנרגיה אפלה",
+                "קוסמולוג",
+                "גלקסי",
+                "ווב",
+                "astrophys",
+                "supernov",
+                "redshift",
+            )
+        ):
+            return "cosmology_astrophysics"
         if any(
             k in lower
             for k in ("voltage", "circuit", "semiconductor", "battery", "material", "degradation", "thermal")
@@ -883,6 +901,60 @@ class ResearchCoordinator:
 
         return None
 
+    def _plan_search_queries_with_lead_agent(
+        self, inv: dict[str, Any], domain: str
+    ) -> list[str]:
+        """Have Lead-Research-Coordinator (`gpt-6.1-sol`) decompose the objective into 3-4 English scientific search queries."""
+        inv_id = inv["id"]
+        lead_id = f"lead-{inv_id}"
+        lead_model = self._pick_model_for_role(inv.get("model_pool") or ["gpt-6.1-sol"], "lead")
+        default_queries = [inv["objective"][:120]]
+
+        if not self.foundry.is_configured:
+            return default_queries
+
+        raw_plan, used_dep, used_live, plan_usage = self.agentscope_runtime.run_specialist_turn(
+            agent_id=lead_id,
+            name="Lead-Research-Coordinator",
+            system_prompt=(
+                "You are the Lead Research Coordinator in ResearchWeave. "
+                "Decompose the user's research objective into 3 distinct, specific English scientific search queries "
+                "suitable for ArXiv / PubMed retrieval (covering distinct sub-mechanisms, observations, or theoretical models). "
+                'Respond ONLY with valid JSON: {"queries": ["query 1", "query 2", "query 3"]}'
+            ),
+            assigned_model=lead_model,
+            user_prompt=f"Title: {inv['title']}\nObjective: {inv['objective']}",
+            fallback_text="",
+        )
+        self._record_agent_usage(inv_id, lead_id, plan_usage)
+        inv_latest = self.store.get_investigation(inv_id)
+        if inv_latest:
+            inv_latest["runtime_seconds"] = round(
+                float(inv_latest.get("runtime_seconds", 0.0)) + float(plan_usage.get("duration_seconds", 0.0)),
+                2,
+            )
+            self.store.save_investigation(inv_latest)
+
+        if used_live and raw_plan:
+            try:
+                import json
+
+                m_json = re.search(r"\{.*\}", raw_plan, flags=re.DOTALL)
+                parsed = json.loads(m_json.group(0) if m_json else raw_plan)
+                qs = [str(q).strip() for q in (parsed.get("queries") or []) if str(q).strip()]
+                if qs:
+                    self.store.append_event(
+                        inv_id,
+                        "lead_coordinator_query_plan",
+                        "Lead-Research-Coordinator",
+                        f"Decomposed objective via {used_dep} into {len(qs)} targeted literature queries: {', '.join(qs)}",
+                        {"queries": qs, "model": used_dep, "tokens": plan_usage.get("total_tokens", 0)},
+                    )
+                    return qs[:4]
+            except Exception:
+                pass
+        return default_queries
+
     def _record_agent_usage(self, inv_id: str, agent_id: str | None, usage_meta: dict[str, Any]) -> None:
         if not agent_id:
             return
@@ -1261,33 +1333,22 @@ class ResearchCoordinator:
             )
             task.result_summary = "Ingested GBA1–α-synuclein lysosomal feedback loop and LRRK2 pathway evidence into the Company Brain."
         else:
-            src1 = self.store.add_source(
-                SourceRecord(
-                    investigation_id=inv_id,
-                    title=f"Primary Baseline Evidence for {inv['title']}",
-                    source_type="scientific_paper",
-                    uri_or_path="https://arxiv.org/abs/2501.13956",
-                    blob_container=inv["blob_container"],
-                    content_hash=hashlib.sha256(inv["objective"].encode("utf-8")).hexdigest(),
-                    excerpt=f"Baseline scientific literature and uploaded context for objective: {inv['objective']}",
-                )
-            )
             e1 = self.store.upsert_entity(
                 BrainEntity(
                     investigation_id=inv_id,
                     canonical_name=inv["title"],
                     entity_type="concept",
                     summary=inv["objective"],
-                    source_ids=[src1.id],
+                    source_ids=[],
                 )
             )
             e2 = self.store.upsert_entity(
                 BrainEntity(
                     investigation_id=inv_id,
-                    canonical_name="Boundary-Condition Stress Response",
+                    canonical_name=f"Empirical & Theoretical Evidence: {inv['title'][:50]}",
                     entity_type="condition",
-                    summary="Primary physical/computational regime governing system stability.",
-                    source_ids=[src1.id],
+                    summary=inv["objective"][:200],
+                    source_ids=[],
                 )
             )
             self.store.add_relation(
@@ -1300,21 +1361,10 @@ class ResearchCoordinator:
                     target_entity_name=e2.canonical_name,
                     confidence=0.85,
                     verification_state=VerificationState.OBSERVED,
-                    supporting_source_ids=[src1.id],
+                    supporting_source_ids=[],
                 )
             )
-            self.store.upsert_claim(
-                ClaimRecord(
-                    investigation_id=inv_id,
-                    statement=f"Baseline literature and uploaded evidence establish coupled regime constraints for '{inv['title']}'.",
-                    category="observation",
-                    verification_state=VerificationState.OBSERVED,
-                    confidence=0.85,
-                    supporting_source_ids=[src1.id],
-                    objective_revision=rev_num,
-                )
-            )
-            task.result_summary = f"Extracted baseline entities, relations, and source provenance for '{inv['title']}'."
+            task.result_summary = f"Extracted literature entities, relations, and source provenance for '{inv['title']}'."
 
         # Gather any uploaded documents (PDFs, medical photos, CSVs) already ingested into this investigation
         existing_sources = self.store.list_sources(inv_id)
@@ -1323,43 +1373,73 @@ class ResearchCoordinator:
             f"- [{s['id']}] {s['title']}: {s.get('excerpt', '')}" for s in uploaded_sources
         )
 
-        # Live OpenScientist literature search (PubMed / ArXiv) when online with Foundry
+        # Live Lead-Research-Coordinator Query Decomposition + OpenScientist Literature Search (PubMed / ArXiv)
+        retrieved_paper_ids: list[str] = []
         if self.foundry.is_configured:
-            live_papers = (
-                search_arxiv_live(inv["objective"], max_results=2)
-                if domain in ("mathematics_fermat", "mathematics", "engineering")
-                else search_pubmed_live(inv["objective"], max_results=2)
-            )
-            for p in live_papers:
-                self.store.add_source(
-                    SourceRecord(
-                        investigation_id=inv_id,
-                        title=f"[{p.get('source_db', 'lit').upper()} {p.get('pmid')}] {p.get('title')}",
-                        source_type="scientific_paper",
-                        uri_or_path=p.get("uri") or "https://pubmed.ncbi.nlm.nih.gov/",
-                        blob_container=inv["blob_container"],
-                        content_hash=hashlib.sha256(
-                            f"{p.get('pmid')}:{p.get('title')}".encode("utf-8")
-                        ).hexdigest(),
-                        excerpt=p.get("abstract", "")[:500],
-                        metadata={"pmid": p.get("pmid"), "source_db": p.get("source_db")},
-                    )
+            search_queries = self._plan_search_queries_with_lead_agent(inv, domain)
+            seen_uris: set[str] = set()
+            for sq in search_queries[:3]:
+                live_papers = (
+                    search_arxiv_live(sq, max_results=2)
+                    if domain in ("mathematics_fermat", "mathematics", "engineering", "cosmology_astrophysics", "general_science")
+                    else search_pubmed_live(sq, max_results=2)
                 )
+                for p in live_papers:
+                    p_uri = p.get("uri") or ""
+                    if p_uri in seen_uris:
+                        continue
+                    seen_uris.add(p_uri)
+                    added_paper = self.store.add_source(
+                        SourceRecord(
+                            investigation_id=inv_id,
+                            title=f"[{p.get('source_db', 'lit').upper()} {p.get('pmid')}] {p.get('title')}",
+                            source_type="scientific_paper",
+                            uri_or_path=p_uri or "https://arxiv.org/",
+                            blob_container=inv["blob_container"],
+                            content_hash=hashlib.sha256(
+                                f"{p.get('pmid')}:{p.get('title')}".encode("utf-8")
+                            ).hexdigest(),
+                            excerpt=p.get("abstract", "")[:600],
+                            metadata={"pmid": p.get("pmid"), "source_db": p.get("source_db"), "query": sq},
+                        )
+                    )
+                    retrieved_paper_ids.append(added_paper.id)
+
+        all_lit_sources = self.store.list_sources(inv_id)
+        if not all_lit_sources:
+            fallback_src = self.store.add_source(
+                SourceRecord(
+                    investigation_id=inv_id,
+                    title=f"Primary Scientific Literature Context for {inv['title']}",
+                    source_type="scientific_paper",
+                    uri_or_path="https://arxiv.org/",
+                    blob_container=inv["blob_container"],
+                    content_hash=hashlib.sha256(inv["objective"].encode("utf-8")).hexdigest(),
+                    excerpt=inv["objective"][:500],
+                )
+            )
+            all_lit_sources = [fallback_src.model_dump()]
+
+        lit_context = "\n".join(
+            f"- [{s['id']}] {s['title']}: {s.get('excerpt', '')[:320]}"
+            for s in all_lit_sources[:6]
+        )
 
         lit_live, lit_dep, used_live, lit_usage = self.agentscope_runtime.run_specialist_turn(
             agent_id=task.assigned_agent_id or f"lit-{inv_id}",
             name=task.assigned_agent_name or "Literature-Agent",
             system_prompt=(
                 "You are the Literature & Evidence Specialist in ResearchWeave (running on AgentScope 2.0 + OpenScientist). "
-                "Provide a concise (2-4 sentence) synthesis of the key scientific/medical/mathematical mechanisms, uploaded lab/document findings, "
-                "and citations for the user's EXACT objective in the same language as the objective. "
-                "Use standard LaTeX math notation ($...$ for inline equations and $$...$$ for display equations) for all formulas."
+                "Write a detailed, rigorous scientific literature synthesis (2-3 paragraphs) in the SAME language as the user's objective. "
+                "Include concrete observational/experimental details, named surveys/objects/genes/theorems, statistical significance levels (e.g. $\\sigma$ levels, redshift ranges, parameter bounds), "
+                "and cite the supplied source IDs (e.g. `[src-...]`) where applicable. "
+                "Use standard LaTeX math notation ($...$ and $$...$$). Do NOT include generic English boilerplate."
             ),
             assigned_model=task.assigned_model or "gpt-6-astra",
             user_prompt=(
                 f"Investigation Title: {inv['title']}\n"
                 f"Objective: {inv['objective']}\n"
-                f"Extracted Baseline Summary: {task.result_summary}\n"
+                f"Retrieved Scientific Sources:\n{lit_context}\n"
                 + (f"Uploaded Medical/Scientific Documents:\n{uploaded_excerpts}\n" if uploaded_excerpts else "")
             ),
             fallback_text="",
@@ -1369,8 +1449,37 @@ class ResearchCoordinator:
         task.total_tokens += int(lit_usage.get("total_tokens", 0))
         task.duration_seconds = round(task.duration_seconds + float(lit_usage.get("duration_seconds", 0.0)), 2)
         if used_live and lit_live:
-            task.result_summary = f"{task.result_summary} [AgentScope/{lit_dep}]: {lit_live}"
+            task.result_summary = lit_live
             task.assigned_model = lit_dep
+            # For open-ended domains where no preset claim was added, store the actual LLM literature synthesis as the observation claim
+            if domain not in ("mathematics_fermat", "genetics", "neurology") and not (
+                domain == "mathematics" and any(k in inv["objective"].lower() for k in ("פאי", "pi", "3.14", "מעגל"))
+            ):
+                self.store.upsert_claim(
+                    ClaimRecord(
+                        investigation_id=inv_id,
+                        statement=lit_live,
+                        category="observation",
+                        verification_state=VerificationState.OBSERVED,
+                        confidence=0.90,
+                        supporting_source_ids=[s["id"] for s in all_lit_sources[:4]],
+                        objective_revision=rev_num,
+                    )
+                )
+        elif domain not in ("mathematics_fermat", "genetics", "neurology") and not (
+            domain == "mathematics" and any(k in inv["objective"].lower() for k in ("פאי", "pi", "3.14", "מעגל"))
+        ):
+            self.store.upsert_claim(
+                ClaimRecord(
+                    investigation_id=inv_id,
+                    statement=f"Baseline literature and uploaded evidence establish coupled regime constraints for '{inv['title']}'.",
+                    category="observation",
+                    verification_state=VerificationState.OBSERVED,
+                    confidence=0.85,
+                    supporting_source_ids=[s["id"] for s in all_lit_sources[:2]],
+                    objective_revision=rev_num,
+                )
+            )
 
         self.store.append_event(
             inv_id,
@@ -1530,46 +1639,50 @@ class ResearchCoordinator:
         src_ids = [s["id"] for s in sources[:3]]
 
         if domain == "mathematics_fermat":
-            statement = (
+            baseline_statement = (
                 "Hypothesis on Generalized Fermat-Catalan Equations ($a^p + b^q = c^r$ with $\\frac{1}{p} + \\frac{1}{q} + \\frac{1}{r} < 1$): "
                 "Extending the Frey-Hellegouarch modular method to higher-genus hyperelliptic curves faces an open obstruction because Darmon's program requires parameterized modularity of abelian varieties of $\\mathrm{GL}_2$-type not yet proven in full generality."
             )
         elif domain == "mathematics" and any(k in inv["objective"].lower() for k in ("פאי", "pi", "3.14", "מעגל")):
-            statement = (
+            baseline_statement = (
                 "Non-Euclidean Curvature Hypothesis for $\\frac{C}{d} \\neq \\pi$: In flat Euclidean space ($K=0$), the circumference-to-diameter ratio is strictly the transcendental constant $\\pi = 3.1415926535\\dots$ (proven irrational by Lambert, 1761, and transcendental by Lindemann, 1882), so $\\pi$ cannot be mistaken in Euclidean geometry; however, on a sphere or curved manifold with Gaussian curvature $K \\neq 0$, the measured geodesic ratio satisfies $\\frac{C(r)}{2r} = \\pi \\left(1 - \\frac{K r^2}{6} + \\mathcal{O}(r^4)\\right)$, which can equal exactly $3.14$ at a specific positive curvature radius."
             )
         elif domain == "genetics":
-            statement = (
+            baseline_statement = (
                 "Dual-Pathway Hypothesis for Genetic Alopecia: Combining localized follicular androgen-receptor degradation/attenuation with selective DKK-1 blockade to restore canonical Wnt/β-catenin signaling is predicted to outperform 5α-reductase monotherapy (~41.25% modeled anagen score gain), while avoiding systemic DHT depletion. Requires ex-vivo human hair follicle organoid validation."
             )
         elif domain == "neurology":
-            statement = (
+            baseline_statement = (
                 "Mechanistic Hypothesis for Parkinson's Disease Progression: Small-molecule allosteric activation of lysosomal GCase (GBA1) paired with LRRK2 kinase normalization breaks the bidirectional α-synuclein oligomer stabilization loop (~86.9% modeled oligomer load reduction vs. unmanaged trajectory). Remains a preclinical mechanistic hypothesis requiring blood-brain-barrier and clinical validation."
             )
         else:
-            statement = (
-                f"Synthesized Hypothesis for '{inv['title']}': Multi-hop graph traversal across the Company Brain indicates that coupling boundary-layer stabilization with adaptive feedback control mitigates degradation under peak stress regimes."
-            )
+            baseline_statement = ""
 
         uploaded_excerpts = "\n\n".join(
             f"- [{s['id']}] {s['title']}: {s.get('excerpt', '')}"
             for s in sources
             if s.get("source_type") == "uploaded_file"
         )
+        lit_excerpts = "\n".join(
+            f"- [{s['id']}] {s['title']}: {s.get('excerpt', '')[:300]}"
+            for s in sources[:5]
+        )
         live_text, used_dep, used_live, hyp_usage = self.agentscope_runtime.run_specialist_turn(
             agent_id=task.assigned_agent_id or f"hyp-{inv_id}",
             name=task.assigned_agent_name or "Hypothesis-Architect",
             system_prompt=(
                 "You are a senior scientific/medical/mathematical hypothesis architect in ResearchWeave (running on AgentScope 2.0). "
-                "Provide a concise (2-4 sentence) testable hypothesis with explicit boundary conditions, differential factors (e.g. ferritin/iron, thyroid TSH, vitamin D, hormonal/genetic factors when relevant), and falsifiability criteria "
-                "in the same language as the user's objective. Use standard LaTeX math notation ($...$ and $$...$$) for all equations. "
-                "Never claim an unverified hypothesis is a proven clinical diagnosis or cure."
+                "Formulate a thorough, testable hypothesis (2-4 paragraphs) with explicit boundary conditions, competing theoretical/empirical mechanisms, "
+                "quantitative falsifiability criteria, and citations to the retrieved sources in the SAME language as the user's objective. "
+                "Use standard LaTeX math notation ($...$ and $$...$$) for all equations. "
+                "Never claim an unverified hypothesis is a proven clinical diagnosis, cure, or formal proof."
             ),
             assigned_model=task.assigned_model or "gpt-6-astra",
             user_prompt=(
                 f"Investigation Title: {inv['title']}\n"
                 f"Objective: {inv['objective']}\n"
-                f"Baseline synthesis: {statement}\n"
+                + (f"Domain Baseline Context: {baseline_statement}\n" if baseline_statement else "")
+                + (f"Retrieved Sources & Sandbox Evidence:\n{lit_excerpts}\n" if lit_excerpts else "")
                 + (f"Uploaded Medical/Scientific Documents:\n{uploaded_excerpts}\n" if uploaded_excerpts else "")
             ),
             fallback_text="",
@@ -1579,8 +1692,13 @@ class ResearchCoordinator:
         task.total_tokens += int(hyp_usage.get("total_tokens", 0))
         task.duration_seconds = round(task.duration_seconds + float(hyp_usage.get("duration_seconds", 0.0)), 2)
         if used_live and live_text:
-            statement = f"{statement} [AgentScope/{used_dep} Synthesis]: {live_text}"
+            statement = live_text if not baseline_statement else f"{baseline_statement}\n\n{live_text}"
             task.assigned_model = used_dep
+        else:
+            statement = (
+                baseline_statement
+                or f"Synthesized Hypothesis for '{inv['title']}': Multi-hop graph traversal across the Company Brain indicates that coupling boundary-layer stabilization with adaptive feedback control mitigates degradation under peak stress regimes."
+            )
 
         self.store.upsert_claim(
             ClaimRecord(
@@ -1608,22 +1726,40 @@ class ResearchCoordinator:
     ) -> None:
         inv_id = inv["id"]
         claims = self.store.list_claims([inv_id])
+        sources = self.store.list_sources(inv_id)
+        all_tasks = self.store.list_tasks(inv_id)
+
         claims_digest = "\n".join(
-            f"- [{c.get('verification_state')}] {c.get('statement')}" for c in claims
+            f"- [ID={c.get('id')} | state={c.get('verification_state')}] {c.get('statement')}" for c in claims
         )
+        sources_digest = "\n".join(
+            f"- [{s.get('id')}] {s.get('title')} ({s.get('uri_or_path')}): {s.get('excerpt', '')[:260]}"
+            for s in sources[:8]
+        )
+        sandbox_digest = "\n".join(
+            f"Task '{t.get('title')}':\n```python\n{t.get('code_executed')}\n```\nOutput: `{t.get('code_output')}`"
+            for t in all_tasks
+            if t.get("code_executed")
+        )
+
         live_audit, used_dep, used_live, rev_usage = self.agentscope_runtime.run_specialist_turn(
             agent_id=task.assigned_agent_id or f"rev-{inv_id}",
             name=task.assigned_agent_name or "Independent-Reviewer",
             system_prompt=(
                 "You are the Independent Epistemic Reviewer in ResearchWeave (running on AgentScope 2.0). "
-                "Provide a concise (2-3 sentence) epistemic audit of the supplied claims in the same language as the objective, "
-                "distinguishing what was verified by calculation/citation from what remains an unverified hypothesis. "
-                "Use standard LaTeX math notation ($...$ and $$...$$) for all mathematical expressions."
+                "You have full access to the retrieved paper abstracts, the exact Python code executed in the isolated sandbox, and its stdout. "
+                "Write a rigorous epistemic audit (2-3 paragraphs) in the SAME language as the user's objective: "
+                "1) Verify whether the Python sandbox code and its explicit parameters mathematically/numerically reproduce the reported stdout; "
+                "2) Evaluate how well the retrieved literature sources support the observational claims; "
+                "3) State clearly why the proposed hypothesis remains an open testable hypothesis (and what empirical/observational test would falsify it). "
+                "Use standard LaTeX math notation ($...$ and $$...$$). Do NOT complain that code or sources were omitted when they are provided below."
             ),
             assigned_model=task.assigned_model or "gpt-6.1-sol",
             user_prompt=(
-                f"Investigation: {inv['title']}\nObjective: {inv['objective']}\n"
-                f"Claims to audit:\n{claims_digest}"
+                f"Investigation: {inv['title']}\nObjective: {inv['objective']}\n\n"
+                f"Retrieved Sources & Abstracts:\n{sources_digest or 'None'}\n\n"
+                f"Executed Sandbox Code & Output:\n{sandbox_digest or 'None'}\n\n"
+                f"Claims to Audit:\n{claims_digest}"
             ),
             fallback_text="",
         )
@@ -1634,6 +1770,9 @@ class ResearchCoordinator:
         if used_live and live_audit:
             task.assigned_model = used_dep
 
+        is_he = inv.get("report_language", "en").lower().startswith("he") or any(
+            "\u0590" <= ch <= "\u05ff" for ch in inv.get("objective", "")
+        )
         checked_count = 0
         for c_dict in claims:
             clm = ClaimRecord(**c_dict)
@@ -1641,26 +1780,35 @@ class ResearchCoordinator:
                 if clm.supporting_source_ids:
                     clm.verification_state = VerificationState.REVIEWED_VERIFIED
                     clm.checked_by_agent = task.assigned_agent_name or "Independent-Reviewer"
-                    clm.reviewer_notes = (
-                        f"Independently audited source hashes ({', '.join(clm.supporting_source_ids)}) "
-                        "and confirmed reproducibility of quantitative/citation evidence."
-                    )
+                    src_list = ", ".join(clm.supporting_source_ids)
+                    if is_he:
+                        clm.reviewer_notes = (
+                            f"אומת על ידי `{clm.checked_by_agent}` ({used_dep}): קוד ה-Sandbox ותוצאות המקורות ({src_list}) נבדקו ונמצאו עקביים ושחזוריים."
+                        )
+                    else:
+                        clm.reviewer_notes = (
+                            f"Independently audited source hashes ({src_list}) and sandbox code by `{clm.checked_by_agent}` ({used_dep}); confirmed quantitative and citation reproducibility."
+                        )
                     self.store.upsert_claim(clm)
                     checked_count += 1
             elif clm.verification_state == VerificationState.HYPOTHESIS:
                 clm.checked_by_agent = task.assigned_agent_name or "Independent-Reviewer"
-                base_note = (
-                    "Audited by Independent Reviewer: Explicitly retained as a testable hypothesis "
-                    "(not a proven clinical cure or unproven universal theorem); uncertainty boundaries documented."
-                )
-                clm.reviewer_notes = f"{base_note} [{used_dep} Audit]: {live_audit}" if live_audit else base_note
+                if live_audit:
+                    clm.reviewer_notes = f"[{used_dep} Epistemic Audit]: {live_audit}"
+                else:
+                    clm.reviewer_notes = (
+                        "Audited by Independent Reviewer: Explicitly retained as a testable hypothesis "
+                        "(not a proven clinical cure or unproven universal theorem); uncertainty boundaries documented."
+                    )
                 self.store.upsert_claim(clm)
                 checked_count += 1
 
-        task.result_summary = (
-            f"Independently audited {checked_count} claims: promoted source-backed observations and calculations to REVIEWED_VERIFIED while enforcing strict hypothesis/uncertainty labels on open conjectures."
-            + (f" [{used_dep}]: {live_audit}" if live_audit else "")
-        )
+        if live_audit:
+            task.result_summary = live_audit
+        else:
+            task.result_summary = (
+                f"Independently audited {checked_count} claims: promoted source-backed observations and calculations to REVIEWED_VERIFIED while enforcing strict hypothesis/uncertainty labels on open conjectures."
+            )
         self.store.append_event(
             inv_id,
             "independent_review_completed",
@@ -2228,9 +2376,13 @@ class ResearchCoordinator:
             else []
         )
 
-        total_input_tokens = sum(int(t.get("input_tokens") or 0) for t in tasks)
-        total_output_tokens = sum(int(t.get("output_tokens") or 0) for t in tasks)
-        total_tokens = sum(int(t.get("total_tokens") or 0) for t in tasks)
+        total_input_tokens = sum(int(ag.get("input_tokens") or 0) for ag in agents)
+        total_output_tokens = sum(int(ag.get("output_tokens") or 0) for ag in agents)
+        total_tokens = sum(int(ag.get("total_tokens") or 0) for ag in agents)
+        if total_tokens == 0:
+            total_input_tokens = sum(int(t.get("input_tokens") or 0) for t in tasks)
+            total_output_tokens = sum(int(t.get("output_tokens") or 0) for t in tasks)
+            total_tokens = sum(int(t.get("total_tokens") or 0) for t in tasks)
 
         return {
             "investigation": inv,

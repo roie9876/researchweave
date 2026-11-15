@@ -19,9 +19,9 @@ def build_live_report_markdown(
     """Compile an evidence-backed research report separating verified results from hypotheses."""
     is_he = inv.get("report_language", "en").lower().startswith("he")
     is_complete = inv.get("status") == "completed"
-    tot_in_tok = sum(int(t.get("input_tokens") or 0) for t in tasks)
-    tot_out_tok = sum(int(t.get("output_tokens") or 0) for t in tasks)
-    tot_tok = sum(int(t.get("total_tokens") or 0) for t in tasks)
+    tot_in_tok = sum(int(ag.get("input_tokens") or 0) for ag in agents) or sum(int(t.get("input_tokens") or 0) for t in tasks)
+    tot_out_tok = sum(int(ag.get("output_tokens") or 0) for ag in agents) or sum(int(t.get("output_tokens") or 0) for t in tasks)
+    tot_tok = sum(int(ag.get("total_tokens") or 0) for ag in agents) or sum(int(t.get("total_tokens") or 0) for t in tasks)
 
     if is_he:
         banner = (
@@ -131,18 +131,17 @@ def build_live_report_markdown(
         lines.append(
             f"### Task: {t['title']} (`{t['status']}` — `{t.get('assigned_agent_name') or 'coordinator'}` | `{t_tok:,} tokens` | `{t_dur:.2f}s`)"
         )
-        if t.get("result_summary"):
-            lines.append(t["result_summary"])
         if t.get("code_executed"):
             lines.extend(
                 [
-                    "",
                     "```python",
                     t["code_executed"],
                     "```",
                     f"**Isolated Sandbox Output:** `{t.get('code_output') or 'none'}`",
                 ]
             )
+        elif t.get("kind") == "literature_analysis" and t.get("result_summary"):
+            lines.append(t["result_summary"])
         lines.append("")
 
     if brain_paths:

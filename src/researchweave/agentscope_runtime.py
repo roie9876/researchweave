@@ -39,7 +39,7 @@ class FoundryAgentScopeChatModel(ChatModelBase):  # type: ignore[misc]
     """Adapter bridging ResearchWeave's FoundryModelAdapter into AgentScope 2.0's ChatModelBase."""
 
     class Parameters(BaseModel):
-        max_tokens: int = 1500
+        max_tokens: int = 3500
 
     def __init__(self, foundry_adapter: Any, model_name: str, fallback_text: str = "") -> None:
         if AGENTSCOPE_AVAILABLE:
@@ -96,7 +96,7 @@ class FoundryAgentScopeChatModel(ChatModelBase):  # type: ignore[misc]
                 target_model,
                 system_prompt=system_prompt,
                 user_prompt=user_prompt,
-                max_tokens=kwargs.get("max_tokens", 1500),
+                max_tokens=kwargs.get("max_tokens", 3500),
             )
             self.last_usage = usage_meta
         else:
@@ -104,7 +104,7 @@ class FoundryAgentScopeChatModel(ChatModelBase):  # type: ignore[misc]
                 target_model,
                 system_prompt=system_prompt,
                 user_prompt=user_prompt,
-                max_tokens=kwargs.get("max_tokens", 1500),
+                max_tokens=kwargs.get("max_tokens", 3500),
             )
             in_tok = max(1, (len(system_prompt) + len(user_prompt)) // 4)
             out_tok = max(1, len(live_text or self.fallback_text) // 4)

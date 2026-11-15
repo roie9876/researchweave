@@ -664,20 +664,38 @@ def search_federated_scientific_literature(
             except Exception:
                 continue
 
-    # Deduplicate by normalized URI and normalized title while preserving all unique works
+    # Deduplicate by normalized URI and normalized title, and score lexical relevance against the sub-queries
+    query_terms = {
+        w.lower()
+        for q in queries
+        for w in re.findall(r"[A-Za-z0-9]{3,}", q)
+        if w.lower() not in {"the", "and", "for", "with", "from", "how", "why", "what", "study", "analysis", "model", "between", "using", "into"}
+    }
+
     deduped: list[dict[str, Any]] = []
     seen_keys: set[str] = set()
     for p in collected:
-        norm_title = re.sub(r"[^a-z0-9]+", "", (p.get("title") or "").lower())[:65]
+        title_str = (p.get("title") or "").strip()
+        abs_str = (p.get("abstract") or "").strip()
+        norm_title = re.sub(r"[^a-z0-9]+", "", title_str.lower())[:65]
         norm_uri = (p.get("uri") or "").strip().lower().rstrip("/")
         key = norm_uri or norm_title
         if not key or key in seen_keys or (norm_title and norm_title in seen_keys):
             continue
+
+        # Relevance filter: ensure the paper matches at least one query term (or is a direct PubChem/ArXiv hit)
+        combined_lower = f"{title_str} {abs_str}".lower()
+        matched_terms = sum(1 for qt in query_terms if qt in combined_lower) if query_terms else 1
+        if query_terms and matched_terms == 0 and p.get("source_db") in ("crossref", "openalex", "europepmc"):
+            continue
+
         seen_keys.add(key)
         if norm_title:
             seen_keys.add(norm_title)
+        p["relevance_matches"] = matched_terms
+        p["rank_score"] = (matched_terms * 50) + min(500, int(p.get("citations") or 0))
         deduped.append(p)
 
-    # Sort so highest-impact peer-reviewed works and direct preprints appear first, while keeping all retrieved papers in the Brain
-    deduped.sort(key=lambda x: int(x.get("citations") or 0), reverse=True)
+    # Sort by combined relevance + citation impact
+    deduped.sort(key=lambda x: int(x.get("rank_score") or 0), reverse=True)
     return deduped

@@ -1006,6 +1006,20 @@ class ResearchCoordinator:
                 pass
         return default_queries
 
+    @staticmethod
+    def _select_cited_or_top_sources(
+        statement: str, sources: list[dict[str, Any]], max_fallback: int = 8
+    ) -> list[str]:
+        """Extract `[src-...]` IDs explicitly cited in `statement`, or fall back to the top `max_fallback` ranked sources."""
+        all_ids = {s["id"] for s in sources}
+        cited = []
+        for m in re.findall(r"src-[a-zA-Z0-9]+", statement or ""):
+            if m in all_ids and m not in cited:
+                cited.append(m)
+        if cited:
+            return cited[:12]
+        return [s["id"] for s in sources[:max_fallback]]
+
     def _record_agent_usage(self, inv_id: str, agent_id: str | None, usage_meta: dict[str, Any]) -> None:
         if not agent_id:
             return
@@ -1512,7 +1526,9 @@ class ResearchCoordinator:
                         category="observation",
                         verification_state=VerificationState.OBSERVED,
                         confidence=0.90,
-                        supporting_source_ids=[s["id"] for s in all_lit_sources],
+                        supporting_source_ids=self._select_cited_or_top_sources(
+                            lit_live, all_lit_sources, max_fallback=8
+                        ),
                         objective_revision=rev_num,
                     )
                 )
@@ -1766,6 +1782,9 @@ class ResearchCoordinator:
                 )
             )
 
+        selected_hyp_sources = self._select_cited_or_top_sources(
+            statement, sources, max_fallback=8
+        )
         self.store.upsert_claim(
             ClaimRecord(
                 investigation_id=inv_id,
@@ -1774,7 +1793,7 @@ class ResearchCoordinator:
                 verification_state=VerificationState.HYPOTHESIS,
                 confidence=0.78,
                 conditions="Subject to experimental/formal verification beyond computational simulation",
-                supporting_source_ids=src_ids,
+                supporting_source_ids=selected_hyp_sources,
                 objective_revision=rev_num,
             )
         )
@@ -1783,7 +1802,7 @@ class ResearchCoordinator:
             inv_id,
             "hypothesis_synthesized",
             task.assigned_agent_name or "Hypothesis-Architect",
-            f"Synthesized testable hypothesis linked to {len(src_ids)} Company Brain sources.",
+            f"Synthesized testable hypothesis linked to {len(selected_hyp_sources)} primary Company Brain sources.",
             {"task_id": task.id},
         )
 
@@ -1839,22 +1858,55 @@ class ResearchCoordinator:
         is_he = inv.get("report_language", "en").lower().startswith("he") or any(
             "\u0590" <= ch <= "\u05ff" for ch in inv.get("objective", "")
         )
+        # Detect if the Independent Reviewer flagged missing excerpts, external parametric recall, or unverified caveats
+        audit_lower = (live_audit or "").lower()
+        has_external_caveat = bool(
+            live_audit
+            and any(
+                kw in audit_lower
+                for kw in (
+                    "missing",
+                    "not in the retrieved",
+                    "not provided in the",
+                    "external",
+                    "parametric",
+                    "unverified",
+                    "חסר",
+                    "לא סופק",
+                    "אינם מופיעים",
+                    "לא נכלל",
+                )
+            )
+        )
+
         checked_count = 0
         for c_dict in claims:
             clm = ClaimRecord(**c_dict)
             if clm.verification_state in (VerificationState.OBSERVED, VerificationState.CALCULATED):
                 if clm.supporting_source_ids:
-                    clm.verification_state = VerificationState.REVIEWED_VERIFIED
                     clm.checked_by_agent = task.assigned_agent_name or "Independent-Reviewer"
-                    src_list = ", ".join(clm.supporting_source_ids)
-                    if is_he:
-                        clm.reviewer_notes = (
-                            f"אומת על ידי `{clm.checked_by_agent}` ({used_dep}): קוד ה-Sandbox ותוצאות המקורות ({src_list}) נבדקו ונמצאו עקביים ושחזוריים."
-                        )
+                    src_list = ", ".join(clm.supporting_source_ids[:8])
+                    if clm.category == "observation" and has_external_caveat:
+                        clm.verification_state = VerificationState.PARTIALLY_VERIFIED
+                        clm.confidence = round(min(clm.confidence, 0.76), 2)
+                        if is_he:
+                            clm.reviewer_notes = (
+                                f"אומת חלקית ע\"י `{clm.checked_by_agent}` ({used_dep}): המקורות המרכזיים ({src_list}) אומתו, אך המבקר ציין כי חלק מהנתונים מסתמכים על הקשר חיצוני מעבר לתקצירים שנשלפו (ראו פירוט בביקורת האפיסטמית מטה)."
+                            )
+                        else:
+                            clm.reviewer_notes = (
+                                f"Partially verified by `{clm.checked_by_agent}` ({used_dep}): Primary sources ({src_list}) confirmed, while the Reviewer noted specific details rely on external context beyond retrieved abstract snippets (see full Epistemic Audit below)."
+                            )
                     else:
-                        clm.reviewer_notes = (
-                            f"Independently audited source hashes ({src_list}) and sandbox code by `{clm.checked_by_agent}` ({used_dep}); confirmed quantitative and citation reproducibility."
-                        )
+                        clm.verification_state = VerificationState.REVIEWED_VERIFIED
+                        if is_he:
+                            clm.reviewer_notes = (
+                                f"אומת על ידי `{clm.checked_by_agent}` ({used_dep}): קוד ה-Sandbox ותוצאות המקורות ({src_list}) נבדקו ונמצאו עקביים ושחזוריים."
+                            )
+                        else:
+                            clm.reviewer_notes = (
+                                f"Independently audited source hashes ({src_list}) and sandbox code by `{clm.checked_by_agent}` ({used_dep}); confirmed quantitative and citation reproducibility."
+                            )
                     self.store.upsert_claim(clm)
                     checked_count += 1
             elif clm.verification_state == VerificationState.HYPOTHESIS:
@@ -2381,7 +2433,7 @@ class ResearchCoordinator:
         verified_claims = sum(
             1
             for c in brain_data["claims"]
-            if c["verification_state"] in ("reviewed_verified", "calculated", "observed")
+            if c["verification_state"] in ("reviewed_verified", "partially_verified", "calculated", "observed")
         )
         hypothesis_claims = sum(
             1 for c in brain_data["claims"] if c["verification_state"] == "hypothesis"

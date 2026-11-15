@@ -46,6 +46,7 @@ class VerificationState(str, Enum):
     OBSERVED = "observed"
     CALCULATED = "calculated"
     REVIEWED_VERIFIED = "reviewed_verified"
+    PARTIALLY_VERIFIED = "partially_verified"
     CONTRADICTED = "contradicted"
     UNRESOLVED = "unresolved"
 

@@ -82,7 +82,7 @@ def build_live_report_markdown(
     verified = [
         c
         for c in claims
-        if c["verification_state"] in ("reviewed_verified", "calculated", "observed")
+        if c["verification_state"] in ("reviewed_verified", "partially_verified", "calculated", "observed")
     ]
     hypotheses = [
         c
@@ -92,6 +92,7 @@ def build_live_report_markdown(
 
     state_labels_he = {
         "reviewed_verified": "ממצא מאומת (REVIEWED_VERIFIED)",
+        "partially_verified": "אומת חלקית / הקשר חיצוני (PARTIALLY_VERIFIED)",
         "calculated": "חישוב מאומת (CALCULATED)",
         "observed": "תצפית מבוססת מקור (OBSERVED)",
         "hypothesis": "השערת מחקר לבדיקה (HYPOTHESIS)",
@@ -102,7 +103,8 @@ def build_live_report_markdown(
     lines.append("### ממצאים וחישובים מאומתים" if is_he else "### Verified & Calculated Findings")
     if verified:
         for c in verified:
-            refs = ", ".join(f"`[{sid}]`" for sid in c.get("supporting_source_ids", [])) or ("פנימי" if is_he else "internal")
+            sup_ids = c.get("supporting_source_ids", [])[:10]
+            refs = ", ".join(f"`[{sid}]`" for sid in sup_ids) or ("פנימי" if is_he else "internal")
             if is_he:
                 lbl = state_labels_he.get(c["verification_state"], c["verification_state"].upper())
                 reviewer = f" *(נבדק ע\"י `{c.get('checked_by_agent')}`)*" if c.get("checked_by_agent") else ""
@@ -129,7 +131,8 @@ def build_live_report_markdown(
     )
     if hypotheses:
         for c in hypotheses:
-            refs = ", ".join(f"`[{sid}]`" for sid in c.get("supporting_source_ids", [])) or ("ללא" if is_he else "none")
+            sup_ids = c.get("supporting_source_ids", [])[:10]
+            refs = ", ".join(f"`[{sid}]`" for sid in sup_ids) or ("ללא" if is_he else "none")
             if is_he:
                 lbl = state_labels_he.get(c["verification_state"], c["verification_state"].upper())
                 lines.append(
@@ -189,8 +192,12 @@ def build_live_report_markdown(
             )
         elif t.get("result_summary"):
             summary_text = t["result_summary"]
-            if t.get("kind") in ("hypothesis_test", "independent_review") and len(summary_text) > 420:
-                summary_text = summary_text[:420].rstrip() + "... *(הניתוח המלא מוצג בסעיף 2 לעיל)*" if is_he else summary_text[:420].rstrip() + "... *(Full analysis in Section 2 above)*"
+            if t.get("kind") in ("literature_analysis", "hypothesis_test", "independent_review") and len(summary_text) > 380:
+                summary_text = (
+                    summary_text[:380].rstrip() + "... *(הניתוח המלא מוצג בסעיף 2 לעיל)*"
+                    if is_he
+                    else summary_text[:380].rstrip() + "... *(Full analysis in Section 2 above)*"
+                )
             lines.append(summary_text)
         lines.append("")
 
@@ -218,9 +225,24 @@ def build_live_report_markdown(
 
     lines.append("## 6. מקורות מידע וציטוטים" if is_he else "## 6. Cited Sources & Provenance")
     if sources:
-        for s in sources:
+        # Prioritize sources referenced by claims plus top-ranked primary sources (up to 25 in report, while full list stays in Brain DB)
+        referenced_ids = {
+            sid
+            for c in claims
+            for sid in (c.get("supporting_source_ids") or [])
+        }
+        primary_sources = [s for s in sources if s["id"] in referenced_ids or s.get("source_type") in ("uploaded_file", "calculation_artifact")]
+        other_sources = [s for s in sources if s["id"] not in referenced_ids and s.get("source_type") not in ("uploaded_file", "calculation_artifact")]
+        display_sources = (primary_sources + other_sources)[:25]
+        for s in display_sources:
             lines.append(
                 f"- **`[{s['id']}]` {s['title']}** (`{s['source_type']}`) — `{s['uri_or_path']}` (SHA-256: `{s['content_hash'][:12]}...`)"
+            )
+        if len(sources) > len(display_sources):
+            lines.append(
+                f"- *(+{len(sources) - len(display_sources)} מקורות משניים נוספים מאונדקסים במוח הארגוני / Company Brain)*"
+                if is_he
+                else f"- *(+{len(sources) - len(display_sources)} additional secondary sources indexed in the Company Brain)*"
             )
     else:
         lines.append("- *No active sources.*")

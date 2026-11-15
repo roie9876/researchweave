@@ -200,7 +200,7 @@
 
     .badge.running { background: rgba(56, 189, 248, 0.2); color: var(--accent); }
     .badge.completed { background: rgba(34, 197, 94, 0.2); color: var(--success); }
-    .badge.paused, .badge.awaiting_confirmation { background: rgba(245, 158, 11, 0.2); color: var(--warning); }
+    .badge.paused, .badge.awaiting_confirmation, .badge.partially_verified { background: rgba(245, 158, 11, 0.2); color: var(--warning); }
 
     .metrics-grid {
       display: grid;
@@ -1290,11 +1290,12 @@ Vitamin_D_25OH,18,ng/mL,30-100</textarea>
       (brain.claims || []).forEach(c => {
         const d = document.createElement("div");
         d.className = "mini-card";
+        const badgeClass = c.verification_state === "reviewed_verified" ? "completed" : "paused";
         d.innerHTML = `
-          <span class="badge ${c.verification_state === 'reviewed_verified' ? 'completed' : 'paused'}">${escapeHtml(c.verification_state)}</span>
+          <span class="badge ${badgeClass}">${escapeHtml(c.verification_state)}</span>
           <p style="margin-top:6px;">${escapeHtml(c.statement)}</p>
           <div style="font-size:11.5px;color:var(--text-muted);margin-top:6px;">
-            Sources: ${(c.supporting_source_ids || []).join(", ") || "none"}
+            Sources: ${(c.supporting_source_ids || []).slice(0, 10).join(", ") || "none"}
             ${c.reviewer_notes ? `<br/>Audit: ${escapeHtml(c.reviewer_notes)}` : ""}
           </div>
         `;
@@ -1321,28 +1322,45 @@ Vitamin_D_25OH,18,ng/mL,30-100</textarea>
     }
 
     function formatMarkdownWithMath(md) {
-      let s = escapeHtml(md);
-      s = s.replace(/```([a-zA-Z0-9_-]*)\n([\s\S]*?)```/g, (_m, _lang, code) => `<pre><code>${code}</code></pre>`);
+      // 1. Extract fenced code blocks BEFORE any markdown or math replacements so Python code is never mangled
+      const codeBlocks = [];
+      let raw = String(md || "").replace(/```([a-zA-Z0-9_-]*)\n([\s\S]*?)```/g, (_m, _lang, code) => {
+        const idx = codeBlocks.length;
+        codeBlocks.push(`<pre class="no-math"><code>${escapeHtml(code)}</code></pre>`);
+        return `@@CODEBLOCK_${idx}@@`;
+      });
+
+      let s = escapeHtml(raw);
       s = s.replace(/^### (.*)$/gm, "<h3>$1</h3>");
       s = s.replace(/^## (.*)$/gm, "<h2>$1</h2>");
       s = s.replace(/^# (.*)$/gm, "<h1>$1</h1>");
       s = s.replace(/^&gt; (.*)$/gm, "<blockquote>$1</blockquote>");
-      // Bold, italic, inline code (wrapped in <bdi dir="ltr"> so mixed Hebrew + English/code never scrambles)
+      // Bold, italic, inline code (wrapped in <bdi dir="ltr"> and marked no-math so KaTeX skips inline code)
       s = s.replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>");
-      s = s.replace(/`([^`\n]+)`/g, '<bdi dir="ltr"><code>$1</code></bdi>');
+      s = s.replace(/`([^`\n]+)`/g, '<bdi dir="ltr"><code class="no-math">$1</code></bdi>');
       s = s.replace(/^\s*- (.*)$/gm, "<li>$1</li>");
       s = s.replace(/\(223\/71\s*&lt;\s*π\s*&lt;\s*22\/7\)/g, "$$(\\tfrac{223}{71} < \\pi < \\tfrac{22}{7})$$");
       s = s.replace(/223\/71\s*&lt;\s*π\s*&lt;\s*22\/7/g, "$$\\tfrac{223}{71} < \\pi < \\tfrac{22}{7}$$");
       s = s.replace(/\n\n+/g, "<br/><br/>");
+
+      // Restore protected code blocks
+      s = s.replace(/@@CODEBLOCK_(\d+)@@/g, (_m, idx) => codeBlocks[Number(idx)] || "");
       return s;
     }
 
     function renderMathInBox(el) {
       if (!el || typeof window.renderMathInElement !== "function") return;
       try {
-        el.innerHTML = el.innerHTML.replace(/(\$\$[\s\S]*?\$\$|\$[^$\n]+\$|\\\([\s\S]*?\\\)|\\\[[\s\S]*?\\\])/g, m =>
+        // Protect <pre> and <code> blocks while unescaping math delimiters
+        const savedCode = [];
+        let html = el.innerHTML.replace(/<(pre|code)[^>]*>[\s\S]*?<\/\1>/gi, m => {
+          savedCode.push(m);
+          return `@@SAVEDCODE_${savedCode.length - 1}@@`;
+        });
+        html = html.replace(/(\$\$[\s\S]*?\$\$|\$[^$\n]+\$|\\\([\s\S]*?\\\)|\\\[[\s\S]*?\\\])/g, m =>
           m.replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&amp;/g, "&")
         );
+        el.innerHTML = html.replace(/@@SAVEDCODE_(\d+)@@/g, (_m, idx) => savedCode[Number(idx)] || "");
         window.renderMathInElement(el, {
           delimiters: [
             { left: "$$", right: "$$", display: true },
@@ -1350,6 +1368,8 @@ Vitamin_D_25OH,18,ng/mL,30-100</textarea>
             { left: "\\(", right: "\\)", display: false },
             { left: "$", right: "$", display: false }
           ],
+          ignoredTags: ["script", "noscript", "style", "textarea", "pre", "code", "option"],
+          ignoredClasses: ["no-math"],
           throwOnError: false
         });
       } catch (e) {

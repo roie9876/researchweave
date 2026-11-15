@@ -699,3 +699,86 @@ def search_federated_scientific_literature(
     # Sort by combined relevance + citation impact
     deduped.sort(key=lambda x: int(x.get("rank_score") or 0), reverse=True)
     return deduped
+
+
+def fetch_pmc_fulltext_sections(pmid_or_pmcid: str, timeout: float = 6.0) -> str:
+    """Fetch full-text open-access article body (Methods, Results, Discussion, Tables) from Europe PMC / PubMed Central XML."""
+    import json
+
+    clean_id = str(pmid_or_pmcid).replace("EPMC:", "").replace("PMID:", "").strip()
+    if not clean_id:
+        return ""
+    try:
+        # 1. If we have a PMID, look up its PMCID via Europe PMC REST API
+        pmcid = clean_id if clean_id.upper().startswith("PMC") else ""
+        if not pmcid:
+            lookup_url = (
+                f"https://www.ebi.ac.uk/europepmc/webservices/rest/search?query=EXT_ID:{urllib.parse.quote(clean_id)}"
+                "&format=json&resultType=core"
+            )
+            req = urllib.request.Request(lookup_url, headers={"User-Agent": "ResearchWeave-OpenScientist/0.4"})
+            with urllib.request.urlopen(req, timeout=timeout) as resp:
+                data = json.loads(resp.read().decode("utf-8", errors="replace"))
+            results = ((data.get("resultList") or {}).get("result")) or []
+            if results:
+                pmcid = (results[0].get("pmcid") or "").strip()
+
+        if not pmcid:
+            return ""
+
+        # 2. Fetch full-text JATS XML from Europe PMC
+        xml_url = f"https://www.ebi.ac.uk/europepmc/webservices/rest/{urllib.parse.quote(pmcid)}/fullTextXML"
+        req_xml = urllib.request.Request(xml_url, headers={"User-Agent": "ResearchWeave-OpenScientist/0.4"})
+        with urllib.request.urlopen(req_xml, timeout=timeout) as xml_resp:
+            xml_bytes = xml_resp.read()
+
+        root = ET.fromstring(xml_bytes)
+        sections_out: list[str] = []
+        for sec in root.findall(".//body//sec"):
+            title_el = sec.find("title")
+            sec_title = "".join(title_el.itertext()).strip() if title_el is not None else ""
+            paras = [
+                re.sub(r"\s+", " ", "".join(p.itertext()).strip())
+                for p in sec.findall("p")
+                if "".join(p.itertext()).strip()
+            ]
+            if paras:
+                header = f"[{sec_title}] " if sec_title else ""
+                sections_out.append(header + " ".join(paras)[:900])
+            if len(sections_out) >= 6:
+                break
+        return "\n".join(sections_out)[:3200]
+    except Exception:
+        return ""
+
+
+def enrich_top_papers_with_fulltext(
+    papers: list[dict[str, Any]], max_fulltext_count: int = 8, timeout: float = 6.0
+) -> list[dict[str, Any]]:
+    """Enrich top-ranked papers with full-text open-access sections (Methods, Results, Discussion) in parallel."""
+    import concurrent.futures
+
+    candidates = [
+        (idx, p)
+        for idx, p in enumerate(papers[: max_fulltext_count * 2])
+        if p.get("source_db") in ("europepmc", "pubmed")
+    ][:max_fulltext_count]
+
+    if not candidates:
+        return papers
+
+    with concurrent.futures.ThreadPoolExecutor(max_workers=min(6, len(candidates))) as pool:
+        futs = [
+            (idx, pool.submit(fetch_pmc_fulltext_sections, str(p.get("pmid") or ""), timeout))
+            for idx, p in candidates
+        ]
+        for idx, fut in futs:
+            try:
+                ft_text = fut.result(timeout=timeout + 1.5)
+                if ft_text:
+                    orig_abs = papers[idx].get("abstract") or ""
+                    papers[idx]["abstract"] = f"{orig_abs}\n\n[FULL-TEXT PMC SECTIONS]:\n{ft_text}"[:2800]
+                    papers[idx]["has_fulltext"] = True
+            except Exception:
+                continue
+    return papers

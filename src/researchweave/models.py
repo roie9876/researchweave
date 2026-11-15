@@ -60,6 +60,12 @@ class StoppingConditions(BaseModel):
         default=None,
         description="Optional best-effort spending cap in USD (None = unlimited by default).",
     )
+    max_iterations: int = Field(
+        default=3,
+        ge=1,
+        le=25,
+        description="Target number of iterative deep-research cycles (Search -> Full-Text Deep Read -> Sandbox -> Hypothesis -> Audit -> Gap Follow-Up).",
+    )
     stop_on_sufficient_evidence: bool = True
     max_consecutive_failures: int = 5
 

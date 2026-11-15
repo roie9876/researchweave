@@ -434,6 +434,8 @@
               <option value="autonomous">Full Autonomy (Unattended after confirmation)</option>
               <option value="approval_required">Require Human Approval Before Major Actions</option>
             </select>
+            <label id="lbl-max-iterations">Deep Research Iterations (Audit → Gap Follow-Up Loops)</label>
+            <input id="new-max-iterations" type="number" min="1" max="25" value="3" />
             <label id="lbl-models">Allowed Azure Foundry Model Pool (comma-separated)</label>
             <input id="new-models" type="text" value="gpt-6.1-sol, gpt-6-astra" />
             <label id="lbl-max-hours">Max Runtime Hours (blank = no limit by default)</label>
@@ -622,6 +624,10 @@ Vitamin_D_25OH,18,ng/mL,30-100</textarea>
                 <input id="live-models" type="text" />
               </div>
               <div class="form-row">
+                <label>Deep Research Iterations (Audit → Gap Follow-Up Loops)</label>
+                <input id="live-max-iterations" type="number" min="1" max="25" value="3" />
+              </div>
+              <div class="form-row">
                 <label>Max Runtime Hours (Optional)</label>
                 <input id="live-max-hours" type="number" step="0.5" placeholder="No limit" />
               </div>
@@ -743,6 +749,7 @@ Vitamin_D_25OH,18,ng/mL,30-100</textarea>
       const reuseRaw = document.getElementById("new-reuse-ids").value.trim();
       const maxHours = document.getElementById("new-max-hours").value;
       const maxBudget = document.getElementById("new-max-budget").value;
+      const maxIters = document.getElementById("new-max-iterations")?.value;
 
       const payload = {
         title,
@@ -757,6 +764,7 @@ Vitamin_D_25OH,18,ng/mL,30-100</textarea>
         stopping_conditions: {
           max_runtime_hours: maxHours ? parseFloat(maxHours) : null,
           max_budget_usd: maxBudget ? parseFloat(maxBudget) : null,
+          max_iterations: maxIters ? parseInt(maxIters, 10) : 3,
           stop_on_sufficient_evidence: true,
           max_consecutive_failures: 5
         }
@@ -977,6 +985,7 @@ Vitamin_D_25OH,18,ng/mL,30-100</textarea>
       const modelsRaw = document.getElementById("live-models").value.trim();
       const maxH = document.getElementById("live-max-hours").value;
       const maxB = document.getElementById("live-max-budget").value;
+      const maxI = document.getElementById("live-max-iterations")?.value;
       const res = await fetch(`/api/investigations/${currentInvId}/settings`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -985,6 +994,7 @@ Vitamin_D_25OH,18,ng/mL,30-100</textarea>
           stopping_conditions: {
             max_runtime_hours: maxH ? parseFloat(maxH) : null,
             max_budget_usd: maxB ? parseFloat(maxB) : null,
+            max_iterations: maxI ? parseInt(maxI, 10) : 3,
             stop_on_sufficient_evidence: true,
             max_consecutive_failures: 5
           }
@@ -1159,6 +1169,9 @@ Vitamin_D_25OH,18,ng/mL,30-100</textarea>
       document.getElementById("live-models").value = inv.model_pool.join(", ");
       document.getElementById("live-max-hours").value = inv.stopping_conditions.max_runtime_hours || "";
       document.getElementById("live-max-budget").value = inv.stopping_conditions.max_budget_usd || "";
+      if (document.getElementById("live-max-iterations")) {
+        document.getElementById("live-max-iterations").value = inv.stopping_conditions.max_iterations || 3;
+      }
 
       // Messages
       const chatBox = document.getElementById("chat-messages");
@@ -1262,12 +1275,15 @@ Vitamin_D_25OH,18,ng/mL,30-100</textarea>
           pulseDot.style.background = "var(--accent)";
           pulseDot.style.boxShadow = "0 0 10px var(--accent)";
         }
+        const curIter = m.current_iteration || 1;
+        const maxIter = m.max_iterations || 3;
+        const iterTag = `[Iteration ${curIter}/${maxIter} | ${m.sources_count || 0} sources (${m.fulltext_sources_count || 0} full-text)] `;
         if (runningTask) {
-          actText.textContent = `Running Task: "${runningTask.title}" via ${runningTask.assigned_agent_name || "Specialist"} (${runningTask.assigned_model || "Foundry"}) — ${m.completed_tasks}/${m.total_tasks} completed`;
+          actText.textContent = `${iterTag}Running: "${runningTask.title}" via ${runningTask.assigned_agent_name || "Specialist"} (${runningTask.assigned_model || "Foundry"}) — ${m.completed_tasks}/${m.total_tasks} tasks`;
         } else if (pendingTasks.length > 0) {
-          actText.textContent = `Executing autonomous cycle (${m.completed_tasks}/${m.total_tasks} tasks completed) — Next: "${pendingTasks[0].title}"`;
+          actText.textContent = `${iterTag}Executing cycle (${m.completed_tasks}/${m.total_tasks} tasks) — Next: "${pendingTasks[0].title}"`;
         } else if (latestEv) {
-          actText.textContent = `[${latestEv.actor}] ${latestEv.summary}`;
+          actText.textContent = `${iterTag}[${latestEv.actor}] ${latestEv.summary}`;
         }
       } else if (inv.status === "completed") {
         if (pulseDot) {

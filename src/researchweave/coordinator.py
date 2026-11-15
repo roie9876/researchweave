@@ -44,6 +44,7 @@ from .models import (
 )
 from .openscientist_engine import (
     OpenScientistKnowledgeState,
+    enrich_top_papers_with_fulltext,
     search_arxiv_live,
     search_federated_scientific_literature,
     search_pubmed_live,
@@ -595,20 +596,22 @@ class ResearchCoordinator:
         )
 
         self._spawn_dynamic_team_and_tasks(inv)
+        max_iters = int((inv.get("stopping_conditions") or {}).get("max_iterations") or 3)
+        total_initial_tasks = max(4, max_iters * 4)
         runs_async = bool(background_async)
         if run_initial_cycle and runs_async and os.getenv("RESEARCHWEAVE_DISABLE_LIVE_LLM") != "1":
             import threading
 
             def _bg_worker() -> None:
                 try:
-                    self.execute_research_step(investigation_id, max_tasks=4)
+                    self.execute_research_step(investigation_id, max_tasks=total_initial_tasks)
                 except Exception:
                     pass
 
             threading.Thread(target=_bg_worker, daemon=True).start()
             self._refresh_report(investigation_id)
         elif run_initial_cycle:
-            self.execute_research_step(investigation_id, max_tasks=4)
+            self.execute_research_step(investigation_id, max_tasks=total_initial_tasks)
         else:
             self._refresh_report(investigation_id)
 
@@ -860,10 +863,106 @@ class ResearchCoordinator:
             },
         ]
 
+    def _spawn_next_iteration_if_needed(self, inv: dict[str, Any]) -> bool:
+        """Closed-loop OpenScientist iteration spawner: if `current_iter < max_iterations` and Foundry is active,
+        have `Lead-Research-Coordinator` inspect the Auditor's critique and spawn Iteration N+1 tasks.
+        """
+        if not self.foundry.is_configured:
+            return False
+
+        inv_id = inv["id"]
+        cond = inv.get("stopping_conditions") or {}
+        max_iters = int(cond.get("max_iterations") or 3)
+        tasks = self.store.list_tasks(inv_id)
+        review_tasks = [t for t in tasks if t.get("kind") == "independent_review" and t.get("status") == TaskStatus.COMPLETED.value]
+        completed_iters = len(review_tasks)
+        if completed_iters >= max_iters:
+            return False
+
+        next_iter = completed_iters + 1
+        latest_audit = (review_tasks[-1].get("result_summary") or "") if review_tasks else ""
+        agents = self.store.list_agents(inv_id)
+        lit_ag = next((a for a in agents if "Literature" in a["name"] or "Loci" in a["name"] or "Explorer" in a["name"]), agents[0])
+        comp_ag = next((a for a in agents if "Sandbox" in a["name"] or "Verifier" in a["name"] or "Modeler" in a["name"] or "Analyst" in a["name"]), agents[0])
+        hyp_ag = next((a for a in agents if "Hypothesis" in a["name"] or "Synthesizer" in a["name"] or "Architect" in a["name"]), agents[0])
+        rev_ag = next((a for a in agents if "Auditor" in a["name"] or "Reviewer" in a["name"]), agents[-1])
+
+        # Ask Lead-Research-Coordinator to formulate the gap-closing focus for Iteration next_iter
+        lead_id = f"lead-{inv_id}"
+        lead_model = self._pick_model_for_role(inv.get("model_pool") or ["gpt-6.1-sol"], "lead")
+        gap_focus, used_dep, used_live, gap_usage = self.agentscope_runtime.run_specialist_turn(
+            agent_id=lead_id,
+            name="Lead-Research-Coordinator",
+            system_prompt=(
+                "You are the Lead Research Coordinator in ResearchWeave. "
+                "Based on the Independent Epistemic Reviewer's critique of the previous iteration, define the specific "
+                "unresolved scientific/clinical/quantitative questions, missing evidence, and sensitivity checks to investigate in the next iteration (2-3 concise sentences in the same language as the objective)."
+            ),
+            assigned_model=lead_model,
+            user_prompt=(
+                f"Investigation Objective: {inv['objective']}\n"
+                f"Completed Iteration #{completed_iters} Reviewer Critique:\n{latest_audit[:1800]}\n"
+                f"Define focus for Deep-Research Iteration #{next_iter}:"
+            ),
+            fallback_text=f"Deep-Research Iteration #{next_iter}: Address unresolved empirical gaps and sensitivity bounds identified by the Independent Reviewer in Iteration #{completed_iters}.",
+        )
+        self._record_agent_usage(inv_id, lead_id, gap_usage)
+
+        t_lit = ResearchTask(
+            investigation_id=inv_id,
+            title=f"[Iteration {next_iter}] Gap-Closing Full-Text Literature & Evidence Retrieval",
+            description=gap_focus or f"Iteration {next_iter} targeted literature retrieval for: {inv['objective']}",
+            kind="literature_analysis",
+            assigned_agent_id=lit_ag["id"],
+            assigned_agent_name=lit_ag["name"],
+            assigned_model=lit_ag["assigned_model"],
+        )
+        t_comp = ResearchTask(
+            investigation_id=inv_id,
+            title=f"[Iteration {next_iter}] Extended Quantitative Sandbox & Sensitivity Modeling",
+            description=f"Extend numerical/mechanistic verification for Iteration {next_iter} focus: {gap_focus}",
+            kind="computation",
+            assigned_agent_id=comp_ag["id"],
+            assigned_agent_name=comp_ag["name"],
+            assigned_model=comp_ag["assigned_model"],
+            depends_on=[t_lit.id],
+        )
+        t_hyp = ResearchTask(
+            investigation_id=inv_id,
+            title=f"[Iteration {next_iter}] Refined Hypothesis & Falsifiability Synthesis",
+            description=f"Refine hypothesis and resolve Iteration {completed_iters} audit caveats: {gap_focus}",
+            kind="hypothesis_test",
+            assigned_agent_id=hyp_ag["id"],
+            assigned_agent_name=hyp_ag["name"],
+            assigned_model=hyp_ag["assigned_model"],
+            depends_on=[t_lit.id, t_comp.id],
+        )
+        t_rev = ResearchTask(
+            investigation_id=inv_id,
+            title=f"[Iteration {next_iter}] Independent Epistemic & Full-Text Audit",
+            description=f"Audit Iteration {next_iter} full-text evidence, sandbox sensitivity outputs, and refined claims.",
+            kind="independent_review",
+            assigned_agent_id=rev_ag["id"],
+            assigned_agent_name=rev_ag["name"],
+            assigned_model=rev_ag["assigned_model"],
+            depends_on=[t_comp.id, t_hyp.id],
+        )
+        for nt in (t_lit, t_comp, t_hyp, t_rev):
+            self.store.upsert_task(nt)
+
+        self.store.append_event(
+            inv_id,
+            "iteration_spawned",
+            "Lead-Research-Coordinator",
+            f"Spawned Deep-Research Iteration #{next_iter}/{max_iters} to resolve Auditor gaps: {gap_focus[:220]}",
+            {"iteration": next_iter, "max_iterations": max_iters, "model": used_dep},
+        )
+        return True
+
     def execute_research_step(
         self, investigation_id: str, max_tasks: int = 1
     ) -> dict[str, Any]:
-        """Execute up to `max_tasks` pending tasks Durably, honoring stopping conditions and approvals."""
+        """Execute up to `max_tasks` pending tasks Durably, honoring stopping conditions and multi-iteration loops."""
         inv = self.store.get_investigation(investigation_id)
         if not inv:
             raise KeyError(f"Investigation {investigation_id} not found.")
@@ -903,18 +1002,20 @@ class ResearchCoordinator:
             )
 
             if not next_task_dict:
-                # If all tasks are completed or stopped, mark investigation completed if no awaiting_approval tasks remain
+                # If all current tasks are completed, check if we should spawn the next Deep-Research Iteration
                 if tasks and all(
                     t["status"] in (TaskStatus.COMPLETED.value, TaskStatus.STOPPED.value)
                     for t in tasks
                 ):
+                    if self._spawn_next_iteration_if_needed(inv):
+                        continue
                     inv["status"] = InvestigationStatus.COMPLETED.value
                     self.store.save_investigation(inv)
                     self.store.append_event(
                         investigation_id,
                         "investigation_completed",
                         "Lead-Research-Coordinator",
-                        "All planned and dynamically spawned research tasks completed and independently audited.",
+                        "All planned and iterative deep-research cycles completed and independently audited.",
                         {},
                     )
                     self._refresh_report(investigation_id)
@@ -945,7 +1046,7 @@ class ResearchCoordinator:
             self._run_single_task(inv, task)
             tasks_executed += 1
 
-        # After executing the requested batch of tasks, check if all tasks are now terminal
+        # After executing the requested batch of tasks, check if another iteration should spawn or if all tasks are terminal
         inv_final = self.store.get_investigation(investigation_id)
         if inv_final and inv_final["status"] == InvestigationStatus.RUNNING.value:
             remaining_tasks = self.store.list_tasks(investigation_id)
@@ -953,16 +1054,17 @@ class ResearchCoordinator:
                 t["status"] in (TaskStatus.COMPLETED.value, TaskStatus.STOPPED.value)
                 for t in remaining_tasks
             ):
-                inv_final["status"] = InvestigationStatus.COMPLETED.value
-                self.store.save_investigation(inv_final)
-                self.store.append_event(
-                    investigation_id,
-                    "investigation_completed",
-                    "Lead-Research-Coordinator",
-                    "All planned and dynamically spawned research tasks completed and independently audited.",
-                    {},
-                )
-                self._refresh_report(investigation_id)
+                if not self._spawn_next_iteration_if_needed(inv_final):
+                    inv_final["status"] = InvestigationStatus.COMPLETED.value
+                    self.store.save_investigation(inv_final)
+                    self.store.append_event(
+                        investigation_id,
+                        "investigation_completed",
+                        "Lead-Research-Coordinator",
+                        "All planned and iterative deep-research cycles completed and independently audited.",
+                        {},
+                    )
+                    self._refresh_report(investigation_id)
 
         return self.get_full_investigation_bundle(investigation_id)
 
@@ -1473,26 +1575,37 @@ class ResearchCoordinator:
 
         # Live Lead-Research-Coordinator Query Decomposition + Uncapped Multi-Database Federated Retrieval
         # (OpenAlex + Semantic Scholar + Crossref + ArXiv + Europe PMC + PubMed + PubChem + ClinicalTrials.gov)
+        # + Full-Text PMC Open-Access Article Section Enrichment
         if self.foundry.is_configured:
-            search_queries = self._plan_search_queries_with_lead_agent(inv, domain)
+            focus_inv = dict(inv)
+            if task.title.startswith("[Iteration ") and task.description:
+                focus_inv["objective"] = f"{inv['objective']}\n\nIteration Gap Focus: {task.description}"
+            search_queries = self._plan_search_queries_with_lead_agent(focus_inv, domain)
             federated_papers = search_federated_scientific_literature(search_queries, domain=domain)
+            federated_papers = enrich_top_papers_with_fulltext(federated_papers, max_fulltext_count=8)
+            existing_uris = {s.get("uri_or_path") for s in self.store.list_sources(inv_id)}
             for p in federated_papers:
                 p_uri = p.get("uri") or "https://openalex.org/"
+                if p_uri in existing_uris:
+                    continue
+                existing_uris.add(p_uri)
+                ft_badge = " [FULL-TEXT]" if p.get("has_fulltext") else ""
                 self.store.add_source(
                     SourceRecord(
                         investigation_id=inv_id,
-                        title=f"[{p.get('source_db', 'lit').upper()} {p.get('pmid')}] {p.get('title')}",
+                        title=f"[{p.get('source_db', 'lit').upper()} {p.get('pmid')}]{ft_badge} {p.get('title')}",
                         source_type="scientific_paper",
                         uri_or_path=p_uri,
                         blob_container=inv["blob_container"],
                         content_hash=hashlib.sha256(
                             f"{p.get('pmid')}:{p.get('title')}".encode("utf-8")
                         ).hexdigest(),
-                        excerpt=p.get("abstract", "")[:650],
+                        excerpt=p.get("abstract", "")[:2200],
                         metadata={
                             "pmid": p.get("pmid"),
                             "source_db": p.get("source_db"),
                             "citations": p.get("citations", 0),
+                            "has_fulltext": bool(p.get("has_fulltext")),
                             "query": p.get("query", ""),
                         },
                     )
@@ -1513,9 +1626,9 @@ class ResearchCoordinator:
             )
             all_lit_sources = [fallback_src.model_dump()]
 
-        # Pass top 20 citation-ranked sources in full detail + titles of all remaining sources so no paper is missed
+        # Pass top 20 citation-ranked sources (including full-text sections when available) + titles of remaining sources
         lit_context = "\n".join(
-            f"- [{s['id']}] {s['title']}: {s.get('excerpt', '')[:280]}"
+            f"- [{s['id']}] {s['title']}: {s.get('excerpt', '')[:650]}"
             for s in all_lit_sources[:20]
         )
         if len(all_lit_sources) > 20:
@@ -1536,7 +1649,8 @@ class ResearchCoordinator:
             user_prompt=(
                 f"Investigation Title: {inv['title']}\n"
                 f"Objective: {inv['objective']}\n"
-                f"Retrieved Scientific Sources:\n{lit_context}\n"
+                + (f"Task / Iteration Focus: {task.description}\n" if task.title.startswith("[Iteration ") else "")
+                + f"Retrieved Scientific Sources:\n{lit_context}\n"
                 + (f"Uploaded Medical/Scientific Documents:\n{uploaded_excerpts}\n" if uploaded_excerpts else "")
             ),
             fallback_text="",
@@ -1687,7 +1801,10 @@ class ResearchCoordinator:
                     "Respond ONLY with raw Python code inside a ```python ... ``` block."
                 ),
                 assigned_model=task.assigned_model or "gpt-6.1-sol",
-                user_prompt=f"Title: {inv['title']}\nObjective: {inv['objective']}",
+                user_prompt=(
+                    f"Title: {inv['title']}\nObjective: {inv['objective']}\n"
+                    + (f"Iteration Focus: {task.description}" if task.title.startswith("[Iteration ") else "")
+                ),
                 fallback_text="",
             )
             task.input_tokens += int(comp_usage.get("input_tokens", 0))
@@ -1808,6 +1925,7 @@ class ResearchCoordinator:
             user_prompt=(
                 f"Investigation Title: {inv['title']}\n"
                 f"Objective: {inv['objective']}\n"
+                + (f"Task / Iteration Focus: {task.description}\n" if task.title.startswith("[Iteration ") else "")
                 + (f"Domain Baseline Context: {baseline_statement}\n" if baseline_statement else "")
                 + (f"Retrieved Sources & Sandbox Evidence:\n{lit_excerpts}\n" if lit_excerpts else "")
                 + (f"Uploaded Medical/Scientific Documents:\n{uploaded_excerpts}\n" if uploaded_excerpts else "")
@@ -2606,7 +2724,10 @@ class ResearchCoordinator:
                 "active_agents": len(agents),
                 "total_tasks": len(tasks),
                 "completed_tasks": sum(1 for t in tasks if t["status"] == "completed"),
+                "current_iteration": max(1, (len(tasks) + 3) // 4),
+                "max_iterations": int((inv.get("stopping_conditions") or {}).get("max_iterations") or 3),
                 "sources_count": len(brain_data["sources"]),
+                "fulltext_sources_count": sum(1 for s in brain_data["sources"] if (s.get("metadata") or {}).get("has_fulltext")),
                 "entities_count": len(brain_data["entities"]),
                 "relations_count": len(brain_data["relations"]),
                 "verified_claims_count": verified_claims,

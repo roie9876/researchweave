@@ -10,7 +10,7 @@ param appPrefix string = 'rweave'
 param allowPublicEndpointTag bool = true
 
 @description('Kubernetes version for the AKS cluster.')
-param kubernetesVersion string = '1.30'
+param kubernetesVersion string = '1.36'
 
 var uniqueSuffix = substring(uniqueString(resourceGroup().id, appPrefix), 0, 6)
 var aksClusterName = '${appPrefix}-${uniqueSuffix}-aks'

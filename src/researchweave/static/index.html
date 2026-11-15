@@ -36,6 +36,7 @@
       color: var(--text);
       min-height: 100vh;
       line-height: 1.55;
+      overflow-x: hidden;
     }
 
     header {
@@ -132,16 +133,22 @@
 
     .layout {
       display: grid;
-      grid-template-columns: 320px 1fr;
+      grid-template-columns: 320px minmax(0, 1fr);
       gap: 20px;
       max-width: 1520px;
+      width: 100%;
       margin: 22px auto;
       padding: 0 22px;
     }
 
+    .layout > *, #active-workspace, .drawer {
+      min-width: 0;
+      max-width: 100%;
+    }
+
     @media (max-width: 980px) {
       .layout {
-        grid-template-columns: 1fr;
+        grid-template-columns: minmax(0, 1fr);
       }
     }
 
@@ -151,6 +158,9 @@
       border-radius: var(--radius);
       padding: 18px;
       box-shadow: 0 10px 28px rgba(0, 0, 0, 0.32);
+      min-width: 0;
+      max-width: 100%;
+      overflow-x: hidden;
     }
 
     .panel h2 {
@@ -308,6 +318,11 @@
       font-size: 14px;
       max-height: 580px;
       overflow-y: auto;
+      overflow-x: auto;
+      min-width: 0;
+      max-width: 100%;
+      overflow-wrap: anywhere;
+      word-break: break-word;
       line-height: 1.75;
     }
 
@@ -336,12 +351,16 @@
       border-radius: 4px;
       font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
       font-size: 12.5px;
+      white-space: pre-wrap;
+      overflow-wrap: anywhere;
+      word-break: break-word;
     }
     .report-preview pre {
       background: #050811;
       border: 1px solid var(--border);
       border-radius: 8px;
       padding: 12px;
+      max-width: 100%;
       overflow-x: auto;
       margin: 10px 0;
       direction: ltr;
@@ -351,6 +370,9 @@
       background: transparent;
       color: #e2e8f0;
       padding: 0;
+      white-space: pre;
+      word-break: normal;
+      overflow-wrap: normal;
     }
     .katex { direction: ltr; unicode-bidi: isolate; font-size: 1.06em; color: #fde68a; }
     .katex-display { direction: ltr; overflow-x: auto; padding: 6px 0; }
@@ -503,6 +525,9 @@
             <button onclick="stepInvestigation()" id="btn-step">▶ Run Next Research Step</button>
             <button class="warning" onclick="pauseInvestigation()" id="btn-pause">⏸ Pause</button>
             <button onclick="resumeInvestigation()" id="btn-resume">↻ Resume</button>
+            <button class="primary" onclick="downloadReport('pdf')" id="btn-top-pdf">📄 Export to PDF</button>
+            <button onclick="downloadReport('docx')" id="btn-top-docx">📝 Export Word (.docx)</button>
+            <button onclick="downloadReport('md')" id="btn-top-md">⬇ Export Markdown</button>
           </div>
         </div>
 
@@ -556,12 +581,12 @@
 
         <!-- Drawer 1: Live Evolving Report & Downloads -->
         <div id="drawer-report" class="drawer open">
-          <div class="inline-row" style="justify-content:space-between;margin-bottom:10px;">
+          <div class="inline-row" style="justify-content:space-between;margin-bottom:10px;flex-wrap:wrap;gap:10px;">
             <strong id="lbl-report-header">Evolving Research Report (Separates Verified Claims from Hypotheses)</strong>
             <div class="inline-row">
-              <button onclick="downloadReport('pdf')">⬇ Download PDF</button>
-              <button onclick="downloadReport('docx')">⬇ Download Word (.docx)</button>
-              <button onclick="downloadReport('md')">⬇ Download Markdown</button>
+              <button class="primary" onclick="downloadReport('pdf')" id="btn-dl-pdf">📄 Export to PDF</button>
+              <button onclick="downloadReport('docx')" id="btn-dl-docx">📝 Download Word (.docx)</button>
+              <button onclick="downloadReport('md')" id="btn-dl-md">⬇ Download Markdown</button>
             </div>
           </div>
           <div id="report-content" class="report-preview"></div>
@@ -1051,11 +1076,11 @@ Vitamin_D_25OH,18,ng/mL,30-100</textarea>
     }
 
     function downloadReport(fmt) {
-      if (!currentInvId) return;
       if (fmt === "pdf") {
         exportRichPdfFromBrowser();
         return;
       }
+      if (!currentInvId) return;
       window.open(`/api/investigations/${currentInvId}/export?format=${fmt}`, "_blank");
     }
 

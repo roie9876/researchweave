@@ -331,6 +331,10 @@ class ResearchWeaveAcceptanceTests(unittest.TestCase):
         self.assertEqual(pdf_upload["source"]["title"], "Uploaded File: blood_panel_report.pdf")
         self.assertIn("Ferritin", pdf_upload["source"]["excerpt"])
 
+        # Regression check: medical text containing "Drospirenone" (substring "pi") must classify as medicine_health, never mathematics/Pi
+        shaked_obj = "שקד בת 16.5, TSH: 4.51, סיום גלולות יאז פלוס (Drospirenone + Ethinyl Estradiol), נשירת שיער אקוטית ומיו-אינוזיטול."
+        self.assertEqual(self.app.coordinator.detect_domain(shaked_obj), "medicine_health")
+
 
 if __name__ == "__main__":
     unittest.main()

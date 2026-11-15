@@ -201,16 +201,34 @@ class ResearchCoordinator:
 
     def detect_domain(self, objective: str) -> str:
         lower = objective.lower()
+        # Check medical, genetics, and neurology FIRST so words like "מספר" or "pi" inside clinical words (e.g. Drospirenone) never misclassify as math
         if any(
             k in lower
-            for k in ("fermat", "פרמה", "modular", "elliptic", "wiles", "ribet")
+            for k in (
+                "blood",
+                "ferritin",
+                "tsh",
+                "thyroid",
+                "vitamin",
+                "clinical",
+                "patient",
+                "inositol",
+                "drospirenone",
+                "ethinyl",
+                "raynaud",
+                "בדיקות דם",
+                "רפואי",
+                "פריטין",
+                "בלוטת התריס",
+                "אלטרוקסין",
+                "הורמונ",
+                "גלולות",
+                "אינוזיטול",
+                "ריינו",
+                "תסמינים",
+            )
         ):
-            return "mathematics_fermat"
-        if any(
-            k in lower
-            for k in ("prime", "theorem", "conjecture", "proof", "מתמט", "פאי", "pi ", "3.14", "geometry", "calculus", "algebra", "equation", "משווא", "מספר")
-        ):
-            return "mathematics"
+            return "medicine_health"
         if any(
             k in lower
             for k in ("parkinson", "פרקינסון", "פקטיסון", "alpha-synuclein", "dopamin", "neuro", "lrrk2")
@@ -222,6 +240,7 @@ class ResearchCoordinator:
                 "hair",
                 "alopecia",
                 "נשירה",
+                "נשירת שיער",
                 "גנטית",
                 "genetic",
                 "follicle",
@@ -229,9 +248,20 @@ class ResearchCoordinator:
                 "ar gene",
                 "wnt",
                 "dermal papilla",
+                "זקיקי השיער",
             )
         ):
             return "genetics"
+        if any(
+            k in lower
+            for k in ("fermat", "פרמה", "modular", "elliptic", "wiles", "ribet")
+        ):
+            return "mathematics_fermat"
+        if any(
+            k in lower
+            for k in ("prime", "theorem", "conjecture", "proof", "מתמט", "פאי", "3.14", "geometry", "calculus", "algebra", "equation", "משווא")
+        ) or re.search(r"\bpi\b", lower):
+            return "mathematics"
         if any(
             k in lower
             for k in (
@@ -1180,7 +1210,10 @@ class ResearchCoordinator:
             task.result_summary = (
                 "Extracted the Frey-Hellegouarch curve construction, Ribet level lowering, and Wiles-Taylor modularity chain into the Company Brain with DOI provenance."
             )
-        elif domain == "mathematics" and any(k in inv["objective"].lower() for k in ("פאי", "pi", "3.14", "מעגל")):
+        elif domain == "mathematics" and (
+            any(k in inv["objective"].lower() for k in ("פאי", "3.14", "מעגל", "ארכימדס", "archimedes"))
+            or bool(re.search(r"\bpi\b", inv["objective"].lower()))
+        ):
             src1 = self.store.add_source(
                 SourceRecord(
                     investigation_id=inv_id,
@@ -1515,10 +1548,11 @@ class ResearchCoordinator:
         if used_live and lit_live:
             task.result_summary = lit_live
             task.assigned_model = lit_dep
-            # For open-ended domains where no preset claim was added, store the actual LLM literature synthesis as the observation claim
-            if domain not in ("mathematics_fermat", "genetics", "neurology") and not (
-                domain == "mathematics" and any(k in inv["objective"].lower() for k in ("פאי", "pi", "3.14", "מעגל"))
-            ):
+            is_pi_domain = domain == "mathematics" and (
+                any(k in inv["objective"].lower() for k in ("פאי", "3.14", "מעגל", "ארכימדס", "archimedes"))
+                or bool(re.search(r"\bpi\b", inv["objective"].lower()))
+            )
+            if domain not in ("mathematics_fermat", "genetics", "neurology") and not is_pi_domain:
                 self.store.upsert_claim(
                     ClaimRecord(
                         investigation_id=inv_id,
@@ -1533,7 +1567,11 @@ class ResearchCoordinator:
                     )
                 )
         elif domain not in ("mathematics_fermat", "genetics", "neurology") and not (
-            domain == "mathematics" and any(k in inv["objective"].lower() for k in ("פאי", "pi", "3.14", "מעגל"))
+            domain == "mathematics"
+            and (
+                any(k in inv["objective"].lower() for k in ("פאי", "3.14", "מעגל", "ארכימדס", "archimedes"))
+                or bool(re.search(r"\bpi\b", inv["objective"].lower()))
+            )
         ):
             is_he = inv.get("report_language", "en").lower().startswith("he") or any(
                 "\u0590" <= ch <= "\u05ff" for ch in inv.get("objective", "")
@@ -1584,7 +1622,10 @@ class ResearchCoordinator:
                 "                counterexamples += 1\n"
                 "print(f'verified_triples={checked_triples}, counterexamples={counterexamples}, status=CONSISTENT_WITH_MODULARITY_PROOF')\n"
             )
-        elif domain == "mathematics" and any(k in inv["objective"].lower() for k in ("פאי", "pi", "3.14", "מעגל")):
+        elif domain == "mathematics" and (
+            any(k in inv["objective"].lower() for k in ("פאי", "3.14", "מעגל", "ארכימדס", "archimedes"))
+            or bool(re.search(r"\bpi\b", inv["objective"].lower()))
+        ):
             code = (
                 "import math\n"
                 "# Verify Archimedes 96-gon lower/upper bounds and Machin's arctangent formula for pi\n"
@@ -1726,7 +1767,10 @@ class ResearchCoordinator:
                 "Hypothesis on Generalized Fermat-Catalan Equations ($a^p + b^q = c^r$ with $\\frac{1}{p} + \\frac{1}{q} + \\frac{1}{r} < 1$): "
                 "Extending the Frey-Hellegouarch modular method to higher-genus hyperelliptic curves faces an open obstruction because Darmon's program requires parameterized modularity of abelian varieties of $\\mathrm{GL}_2$-type not yet proven in full generality."
             )
-        elif domain == "mathematics" and any(k in inv["objective"].lower() for k in ("פאי", "pi", "3.14", "מעגל")):
+        elif domain == "mathematics" and (
+            any(k in inv["objective"].lower() for k in ("פאי", "3.14", "מעגל", "ארכימדס", "archimedes"))
+            or bool(re.search(r"\bpi\b", inv["objective"].lower()))
+        ):
             baseline_statement = (
                 "Non-Euclidean Curvature Hypothesis for $\\frac{C}{d} \\neq \\pi$: In flat Euclidean space ($K=0$), the circumference-to-diameter ratio is strictly the transcendental constant $\\pi = 3.1415926535\\dots$ (proven irrational by Lambert, 1761, and transcendental by Lindemann, 1882), so $\\pi$ cannot be mistaken in Euclidean geometry; however, on a sphere or curved manifold with Gaussian curvature $K \\neq 0$, the measured geodesic ratio satisfies $\\frac{C(r)}{2r} = \\pi \\left(1 - \\frac{K r^2}{6} + \\mathcal{O}(r^4)\\right)$, which can equal exactly $3.14$ at a specific positive curvature radius."
             )

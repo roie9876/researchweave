@@ -132,6 +132,18 @@ spec:
       containers:
         - name: researchweave
           image: docker.io/library/python:3.12-slim
+          command:
+            - python3
+            - -c
+            - |
+              import importlib.util, os, pathlib, subprocess, sys, tarfile, urllib.request
+              if not importlib.util.find_spec("researchweave") or not importlib.util.find_spec("agentscope"):
+                  urllib.request.urlretrieve("https://github.com/roie9876/researchweave/archive/refs/heads/main.tar.gz", "/tmp/rw.tar.gz")
+                  with tarfile.open("/tmp/rw.tar.gz") as tf:
+                      tf.extractall("/tmp/rw")
+                  src_dir = str(next(pathlib.Path("/tmp/rw").iterdir()))
+                  subprocess.check_call([sys.executable, "-m", "pip", "install", "--no-cache-dir", src_dir])
+              os.execvp(sys.executable, [sys.executable, "-m", "researchweave.server"])
           ports:
             - containerPort: 8080
           env:

@@ -28,7 +28,8 @@ jobs:
         run: |
           python -m unittest discover -s tests -v
 
-      - name: Verify Bicep compiles cleanly to ARM JSON
+      - name: Verify Bicep templates compile cleanly
         run: |
           az bicep build --file infra/main.bicep --outfile infra/azuredeploy.json
+          az bicep build --file infra/aks-main.bicep --stdout > /dev/null
           git diff --exit-code infra/azuredeploy.json

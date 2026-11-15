@@ -25,57 +25,64 @@ ResearchWeave is an open-source autonomous research organization in software wit
 
 ![ResearchWeave High-Level Layered Architecture](docs/architecture-overview.svg)
 
-### 1. Existing Open-Source Software & Frameworks Used
+### 1. Open-Source Software & Frameworks Used
 
-ResearchWeave combines lightweight, zero-lock-in Python building blocks in the runnable prototype (`src/researchweave/`) with source-verified open-source systems across its discovery loop, dynamic agent teams, durable coordination, and Company Brain layers:
+ResearchWeave integrates source-verified open-source software across its scientific discovery loop, multi-agent runtime, ontology/provenance knowledge graph, and cloud-native compute layers:
 
-| Layer | Open-Source Project / Package | License | Role in ResearchWeave (`src/` Runtime & Architecture Baseline) |
+| Layer | Open-Source Project / Package | License | Status & Role in ResearchWeave |
 | :--- | :--- | :--- | :--- |
-| **Data Validation & Schemas** | **[Pydantic v2](https://github.com/pydantic/pydantic)** | MIT | **Active in `pyproject.toml`:** Validates all investigation models, objective revisions, specialist personas, claims (`REVIEWED_VERIFIED` vs. `HYPOTHESIS`), and API payloads (`src/researchweave/models.py`). |
-| **Azure Auth & Object SDKs** | **[azure-identity](https://github.com/Azure/azure-sdk-for-python)** & **[azure-storage-blob](https://github.com/Azure/azure-sdk-for-python)** | MIT | **Active in `pyproject.toml`:** Keyless `DefaultAzureCredential` authentication and per-investigation Blob container provisioning/uploads (`src/researchweave/blob_store.py`). |
-| **Model Client SDK** | **[openai (Python SDK)](https://github.com/openai/openai-python)** | Apache-2.0 | **Active in `pyproject.toml`:** Standardized client interface for Microsoft Foundry / Azure OpenAI model pools (`AZURE_OPENAI_ENDPOINT`), paired with an offline deterministic domain engine for zero-key local runs. |
-| **Embedded Durable State & Graph** | **[SQLite 3](https://www.sqlite.org/)** + **Python Stdlib (`http.server`, `ast`, `zipfile`)** | Public Domain / PSF | **Active in `src/`:** Thread-safe canonical store for investigations, entities, typed graph relations, and claims (`brain.py`), AST-inspected sandbox execution (`sandbox.py`), and dependency-free PDF/DOCX/Markdown generation (`reports.py`). |
-| **Research Discovery Loop** | **[OpenScientist](https://github.com/openscientist-io/openscientist)** *(with Agent Zero & OpenHands evaluated)* | Apache-2.0 | **Application & Discovery Baseline:** Iterative scientific discovery loop, structured research state, hypothesis tracking, and report synthesis patterns adapted in `coordinator.py`. |
-| **Dynamic Specialist Teams** | **[AgentScope 2.0](https://github.com/agentscope-ai/agentscope)** *(with LangGraph MIT compared)* | Apache-2.0 | **Multi-Agent Team Pattern:** Runtime-authored specialist agent roles (`Literature`, `Computation`, `Hypothesis`, `Independent Reviewer`) with dynamic model-pool assignment and Manager–Workers–Reviewer coordination. |
-| **Durable Orchestration** | **[Temporal](https://github.com/temporalio/temporal)** + **Temporal Python SDK** | MIT | **Multi-Day Lifecycle Layer:** Target durable workflow engine for 48h–10d unattended runs, activity retries, and non-blocking live steering signals. |
-| **Company Brain & Provenance** | **[TrustGraph](https://github.com/trustgraph-ai/trustgraph)**, **[LightRAG](https://github.com/HKUDS/LightRAG)**, **[Graphiti](https://github.com/getzep/graphiti)** | Apache-2.0 / MIT | **Knowledge Graph & Lineage:** OWL/RDF ontology extraction, PROV-O source provenance, contradiction preservation, and scoped cross-investigation graph traversal implemented in `brain.py`. |
-| **Relational & Graph DB Scale-Out** | **[PostgreSQL](https://www.postgresql.org/)**, **[Apache AGE](https://age.apache.org/)**, **[pgvector](https://github.com/pgvector/pgvector)** | PostgreSQL / Apache-2.0 | **Target Production Store:** Canonical transactional store, OpenCypher graph queries (`Apache AGE`), and vector similarity baseline replacing local SQLite at scale. |
-| **Document Parsing & UI Protocol** | **[Docling](https://github.com/docling-project/docling)**, **[AG-UI Protocol](https://github.com/ag-ui-protocol/ag-ui)**, **[OpenTelemetry](https://opentelemetry.io/)** | MIT / Apache-2.0 | **Ingestion, Streaming & Telemetry:** Structured PDF/table locator extraction (`Docling`), ordered agent-to-UI timeline event streaming (`AG-UI`), and vendor-neutral observability traces (`OpenTelemetry`). |
+| **Multi-Agent Team Runtime** | **[AgentScope 2.0 (`agentscope>=2.0.0`)](https://github.com/agentscope-ai/agentscope)** | Apache-2.0 | **Active in `pyproject.toml` & `agentscope_runtime.py`:** Instantiates genuine `agentscope.agent.Agent` specialist instances (`Literature`, `Computation`, `Hypothesis`, `Independent Reviewer`) backed by `FoundryAgentScopeChatModel` (`ChatModelBase`) routing across **`gpt-6.1-sol`** and **`gpt-6-astra`**. |
+| **Scientific Discovery Loop & Citation Verification** | **[OpenScientist](https://github.com/openscientist-io/openscientist)** | Apache-2.0 | **Active in `openscientist_engine.py`:** Implements OpenScientist's iterative `KnowledgeState` (`hypotheses` `H001+`, `findings` `F001+` with abstract-snippet `validate_citation`, `literature` `L001+`, `analysis_log`) plus live **NCBI PubMed E-utilities** and **ArXiv Atom API** retrieval. |
+| **Company Brain Ontology & Provenance** | **[TrustGraph](https://github.com/trustgraph-ai/trustgraph)** (+ **Apache Cassandra 5.0** & **Qdrant** on AKS) | Apache-2.0 | **Active in `trustgraph_brain.py` & `infra/k8s-trustgraph-openscientist.yaml`:** Enforces the OWL/RDF Scientific Ontology (`researchweave-scientific-ontology-v1`) and generates W3C `PROV-O` (`http://www.w3.org/ns/prov#`, `https://trustgraph.ai/ns/`) lineage triples (`Document -> Page -> Chunk -> ExtractionActivity -> Subgraph -> Entity/Relation`) with live `gpt-6-astra` extraction. |
+| **Data Validation & Schemas** | **[Pydantic v2](https://github.com/pydantic/pydantic)** | MIT | **Active in `pyproject.toml` & `models.py`:** Validates all investigation models, objective revisions, specialist personas, epistemic claim states (`REVIEWED_VERIFIED` vs. `HYPOTHESIS`), and HTTP payloads. |
+| **Azure Auth, Blob & Model SDKs** | **[azure-identity](https://github.com/Azure/azure-sdk-for-python)**, **[azure-storage-blob](https://github.com/Azure/azure-sdk-for-python)**, **[openai](https://github.com/openai/openai-python)** | MIT / Apache-2.0 | **Active in `pyproject.toml`:** Keyless `DefaultAzureCredential` (`get_bearer_token_provider`) authentication for Microsoft Foundry (`gpt-6.1-sol` / `gpt-6-astra`), Azure AI Content Understanding, and per-investigation Blob containers (`blob_store.py`). |
+| **Relational & Durable State** | **[PostgreSQL 16](https://www.postgresql.org/)** (+ `pgvector` / `Apache AGE`) & **[SQLite 3](https://www.sqlite.org/)** | PostgreSQL / Public Domain | **Active (`brain.py` SQLite locally; `infra/aks-main.bicep` Azure PostgreSQL Flexible Server in cloud):** Canonical durable persistence for investigations, tasks, sources, entities, relations, and claims. |
+| **MicroVM Sandbox Isolation** | **[Kata Containers](https://katacontainers.io/)** (`KataMshvVmIsolation` on AKS) + **AST Guardrails (`sandbox.py`)** | Apache-2.0 | **Active in `sandbox.py` & `infra/aks-main.bicep`:** Static Python AST safety validation paired with hypervisor-isolated Kata microVM pods and zero-trust `NetworkPolicy` on the AKS `sandboxpool`. |
 
 ---
 
-### 2. Microsoft Azure Services Used (Provisioned vs. Runtime vs. Scale-Out)
+### 2. Microsoft Azure Services & Compute Architecture
 
-| Azure Service | Bicep Resource (`infra/main.bicep`) | Status in Repo | Why ResearchWeave Uses It |
-| :--- | :--- | :--- | :--- |
-| **Azure Container Apps** | `Microsoft.App/containerApps` & `managedEnvironments` | **Provisioned in IaC** | Hosts the ResearchWeave web workspace and API (port `8080`, 1–5 auto-scaling replicas) without AKS cluster management overhead. |
-| **Azure Blob Storage** | `Microsoft.Storage/storageAccounts` | **Provisioned in IaC + Active in `blob_store.py`** | Automatically creates an isolated container (`rw-inv-<id>`) per investigation for uploaded datasets and generated artifacts with SHA-256 metadata (falls back to local disk when offline). |
-| **Microsoft Foundry / Azure AI Services** | `Microsoft.CognitiveServices/accounts` (`AIServices`) | **Provisioned in IaC + Configured via Env** | Provides the enterprise model pool endpoint (`AZURE_OPENAI_ENDPOINT`) with `disableLocalAuth: true` so researchers can assign and live-switch models across specialists. |
-| **User-Assigned Managed Identity & Azure RBAC** | `Microsoft.ManagedIdentity/userAssignedIdentities` | **Provisioned in IaC + Active via `DefaultAzureCredential`** | Keyless service-to-service authentication granting `Storage Blob Data Contributor` and `Cognitive Services OpenAI User` roles—zero API keys or connection strings in code. |
-| **Azure Log Analytics & Application Insights** | `Microsoft.OperationalInsights/workspaces` & `Microsoft.Insights/components` | **Provisioned in IaC** | Captures container logs (30-day retention) and APM telemetry (`APPLICATIONINSIGHTS_CONNECTION_STRING`) separately from the user-facing research timeline. |
-| **Azure Container Apps Sandboxes & Azure Batch** | *Target Scale-Out (`docs/`)* | **Architecture Target** *(Local AST subprocess active today)* | MicroVM-isolated dynamic code sessions for generated Python verification scripts, plus Azure Batch for heavy/GPU scientific workloads. |
-| **Azure Database for PostgreSQL Flexible Server** | *Target Scale-Out (`docs/`)* | **Architecture Target** *(SQLite active today)* | Managed transactional database supporting `pgvector` and `Apache AGE` for multi-user production state and Temporal visibility. |
+| Azure Service | IaC Definition (`infra/aks-main.bicep` & `infra/main.bicep`) | Role in ResearchWeave |
+| :--- | :--- | :--- |
+| **Azure Kubernetes Service (AKS)** | `Microsoft.ContainerService/managedClusters` (`infra/aks-main.bicep`) | **Primary Production Compute Cluster** with **4 specialized node pools**:<br>• `apppool` (`Standard_D4s_v5`): OpenScientist UI/API & AgentScope 2.0 specialist workers<br>• `brainpool` (`Standard_E8s_v5` + Premium SSD v2 CSI): TrustGraph StatefulSets (Cassandra 5.0 + Qdrant)<br>• `sandboxpool` (`KataMshvVmIsolation`): Hypervisor microVM-isolated pods for untrusted agent Python code<br>• `gpupool` (`Standard_NC4as_T4_v3`, auto-scales `0..4`): Scale-to-zero GPU nodes for heavy scientific simulations |
+| **Microsoft Foundry / Azure AI Services** | `Microsoft.CognitiveServices/accounts` (`kind: 'AIServices'`) | Hosts the **`gpt-6.1-sol`** (`2026-09-29`, `GlobalStandard`, cap 100 — Lead Coordinator, Computation, Independent Reviewer) and **`gpt-6-astra`** (`2026-09-03`, `GlobalStandard`, cap 100 — Literature Explorer, TrustGraph Ontology & Hypothesis Architect) deployments with `disableLocalAuth: true`. |
+| **Azure AI Content Understanding / Document Intelligence** | Enabled on `Microsoft.CognitiveServices/accounts` (`content_understanding.py`) | Extracts structured Markdown, scientific tables, section hierarchies, and exact page/character-offset locators (`prebuilt-layout:analyze`) via keyless Entra RBAC before indexing into TrustGraph. |
+| **Azure Database for PostgreSQL Flexible Server** | `Microsoft.DBforPostgreSQL/flexibleServers` (`infra/aks-main.bicep`) | Managed PostgreSQL 16 (`Standard_D2ds_v5`, Entra ID authentication enabled) for canonical multi-user OpenScientist and workflow state. |
+| **Azure Blob Storage** | `Microsoft.Storage/storageAccounts` (`blob_store.py`) | Automatically provisions an isolated container (`rw-inv-<id>`) per investigation for raw uploaded PDFs/CSVs and generated sandbox calculation artifacts with SHA-256 provenance. |
+| **User-Assigned Managed Identity & Workload Identity** | `Microsoft.ManagedIdentity/userAssignedIdentities` + Federated OIDC | Keyless authentication (`Storage Blob Data Contributor`, `Cognitive Services OpenAI User`, `Cognitive Services User`) for both AKS pods (`researchweave-sa`) and Container Apps. |
+| **Azure Container Apps** *(Lightweight Single-Click Option)* | `Microsoft.App/containerApps` (`infra/main.bicep` & `infra/azuredeploy.json`) | Fast serverless deployment profile for running the unified ResearchWeave workspace without provisioning a full AKS cluster. |
+| **Azure Log Analytics & Application Insights** | `Microsoft.OperationalInsights/workspaces` & `Microsoft.Insights/components` | Captures AKS/Container Apps operational telemetry and container logs (`PerGB2018`, 30-day retention). |
 
 ---
 
-## One-Click Azure Deployment
+## Azure Deployment Options
 
-Anyone can deploy their own instance of ResearchWeave into their own Azure subscription:
+### Option A: Production AKS + TrustGraph + PostgreSQL + Foundry Stack (`infra/aks-main.bicep`)
+
+Deploys the full **AKS cluster** (4 node pools including Kata microVM sandboxes and scale-to-zero GPU pool), **Azure Database for PostgreSQL Flexible Server**, **Microsoft Foundry (`gpt-6.1-sol` + `gpt-6-astra` + Content Understanding)**, **Azure Blob Storage**, and **Workload Identity**:
+
+```bash
+az group create --name rg-researchweave-aks --location swedencentral --tags SecurityControl=Ignore
+az deployment group create \
+  --resource-group rg-researchweave-aks \
+  --template-file infra/aks-main.bicep \
+  --parameters appPrefix=rweave
+```
+
+Then apply the TrustGraph (Qdrant + Cassandra) and OpenScientist/AgentScope Kubernetes manifests:
+
+```bash
+az aks get-credentials --resource-group rg-researchweave-aks --name <aksClusterName>
+kubectl apply -f infra/k8s-trustgraph-openscientist.yaml
+```
+
+### Option B: Lightweight One-Click Container Apps Deployment (`infra/main.bicep` & `infra/azuredeploy.json`)
 
 [![Deploy to Azure](https://aka.ms/deploytoazurebutton)](https://portal.azure.com/#create/Microsoft.Template/uri/https%3A%2F%2Fraw.githubusercontent.com%2Froie9876%2Fresearchweave%2Fmain%2Finfra%2Fazuredeploy.json)
 
-### What the Template Provisions (`infra/main.bicep` & `infra/azuredeploy.json`)
-
-- **User-Assigned Managed Identity** (`Microsoft.ManagedIdentity/userAssignedIdentities`) — zero hardcoded keys or passwords.
-- **Azure Storage Account** (`Microsoft.Storage/storageAccounts`) — backs per-investigation Blob containers with `Storage Blob Data Contributor` RBAC.
-- **Microsoft Foundry / Azure AI Services** (`Microsoft.CognitiveServices/accounts`) — model pool endpoint with `disableLocalAuth: true` and `Cognitive Services OpenAI User` RBAC.
-- **Azure Container Apps Environment & App** (`Microsoft.App/containerApps`) — hosts the ResearchWeave web workspace and API.
-- **Log Analytics & Application Insights** — operational telemetry.
-
-### CLI Deployment Option
-
 ```bash
-az group create --name rg-researchweave --location eastus2 --tags SecurityControl=Ignore
+az group create --name rg-researchweave --location swedencentral --tags SecurityControl=Ignore
 az deployment group create \
   --resource-group rg-researchweave \
   --template-file infra/main.bicep \
@@ -102,6 +109,7 @@ PYTHONPATH=src python3 -m unittest discover -s tests -v
 
 ## Architecture & Market Research Documentation
 
+- [Engineering Rebuild & Integration Progress Tracker](PROGRESS.md)
 - [Source-Verified Market & Open-Source Study](docs/autonomous-research-market-study-2026-11-14.md)
 - [Product Specification](docs/research-system-specification-draft.md)
 - [System Architecture Proposal](docs/researchweave-architecture-proposal.md)

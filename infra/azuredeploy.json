@@ -5,7 +5,7 @@
     "_generator": {
       "name": "bicep",
       "version": "0.44.1.10279",
-      "templateHash": "6971869205557124789"
+      "templateHash": "4262724625406845847"
     }
   },
   "parameters": {
@@ -74,7 +74,8 @@
         "capacity": 100
       }
     ],
-    "cognitiveServicesOpenAIUserRoleId": "[subscriptionResourceId('Microsoft.Authorization/roleDefinitions', '5e0bd9bd-7b93-4f28-af87-19fc36ad61bd')]"
+    "cognitiveServicesOpenAIUserRoleId": "[subscriptionResourceId('Microsoft.Authorization/roleDefinitions', '5e0bd9bd-7b93-4f28-af87-19fc36ad61bd')]",
+    "cognitiveServicesUserRoleId": "[subscriptionResourceId('Microsoft.Authorization/roleDefinitions', 'a97b65f3-24c7-4388-baec-2e87135dc908')]"
   },
   "resources": [
     {
@@ -200,6 +201,21 @@
       ]
     },
     {
+      "type": "Microsoft.Authorization/roleAssignments",
+      "apiVersion": "2022-04-01",
+      "scope": "[resourceId('Microsoft.CognitiveServices/accounts', variables('aiServicesName'))]",
+      "name": "[guid(resourceId('Microsoft.CognitiveServices/accounts', variables('aiServicesName')), resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', variables('managedIdentityName')), variables('cognitiveServicesUserRoleId'))]",
+      "properties": {
+        "roleDefinitionId": "[variables('cognitiveServicesUserRoleId')]",
+        "principalId": "[reference(resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', variables('managedIdentityName')), '2023-01-31').principalId]",
+        "principalType": "ServicePrincipal"
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.CognitiveServices/accounts', variables('aiServicesName'))]",
+        "[resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', variables('managedIdentityName'))]"
+      ]
+    },
+    {
       "type": "Microsoft.App/managedEnvironments",
       "apiVersion": "2024-03-01",
       "name": "[variables('containerEnvName')]",
@@ -247,7 +263,7 @@
               "command": [
                 "python3",
                 "-c",
-                "import importlib.util, os, pathlib, subprocess, sys, tarfile, urllib.request\nif not importlib.util.find_spec(\"researchweave\"):\n    urllib.request.urlretrieve(os.environ[\"RESEARCHWEAVE_ARCHIVE_URL\"], \"/tmp/rw.tar.gz\")\n    with tarfile.open(\"/tmp/rw.tar.gz\") as tf:\n        tf.extractall(\"/tmp/rw\")\n    src_dir = str(next(pathlib.Path(\"/tmp/rw\").iterdir()))\n    subprocess.check_call([sys.executable, \"-m\", \"pip\", \"install\", \"--no-cache-dir\", src_dir])\nos.execvp(sys.executable, [sys.executable, \"-m\", \"researchweave.server\"])"
+                "import importlib.util, os, pathlib, subprocess, sys, tarfile, urllib.request\nif not importlib.util.find_spec(\"researchweave\") or not importlib.util.find_spec(\"agentscope\"):\n    urllib.request.urlretrieve(os.environ[\"RESEARCHWEAVE_ARCHIVE_URL\"], \"/tmp/rw.tar.gz\")\n    with tarfile.open(\"/tmp/rw.tar.gz\") as tf:\n        tf.extractall(\"/tmp/rw\")\n    src_dir = str(next(pathlib.Path(\"/tmp/rw\").iterdir()))\n    subprocess.check_call([sys.executable, \"-m\", \"pip\", \"install\", \"--no-cache-dir\", src_dir])\nos.execvp(sys.executable, [sys.executable, \"-m\", \"researchweave.server\"])"
               ],
               "resources": {
                 "cpu": "[json('1.0')]",

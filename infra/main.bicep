@@ -147,12 +147,26 @@ var cognitiveServicesOpenAIUserRoleId = subscriptionResourceId(
   'Microsoft.Authorization/roleDefinitions',
   '5e0bd9bd-7b93-4f28-af87-19fc36ad61bd'
 )
+var cognitiveServicesUserRoleId = subscriptionResourceId(
+  'Microsoft.Authorization/roleDefinitions',
+  'a97b65f3-24c7-4388-baec-2e87135dc908'
+)
 
 resource aiRoleAssignment 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
   name: guid(aiServices.id, managedIdentity.id, cognitiveServicesOpenAIUserRoleId)
   scope: aiServices
   properties: {
     roleDefinitionId: cognitiveServicesOpenAIUserRoleId
+    principalId: managedIdentity.properties.principalId
+    principalType: 'ServicePrincipal'
+  }
+}
+
+resource aiCognitiveUserRoleAssignment 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
+  name: guid(aiServices.id, managedIdentity.id, cognitiveServicesUserRoleId)
+  scope: aiServices
+  properties: {
+    roleDefinitionId: cognitiveServicesUserRoleId
     principalId: managedIdentity.properties.principalId
     principalType: 'ServicePrincipal'
   }
@@ -200,7 +214,7 @@ resource containerApp 'Microsoft.App/containerApps@2024-03-01' = {
           command: [
             'python3'
             '-c'
-            'import importlib.util, os, pathlib, subprocess, sys, tarfile, urllib.request\nif not importlib.util.find_spec("researchweave"):\n    urllib.request.urlretrieve(os.environ["RESEARCHWEAVE_ARCHIVE_URL"], "/tmp/rw.tar.gz")\n    with tarfile.open("/tmp/rw.tar.gz") as tf:\n        tf.extractall("/tmp/rw")\n    src_dir = str(next(pathlib.Path("/tmp/rw").iterdir()))\n    subprocess.check_call([sys.executable, "-m", "pip", "install", "--no-cache-dir", src_dir])\nos.execvp(sys.executable, [sys.executable, "-m", "researchweave.server"])'
+            'import importlib.util, os, pathlib, subprocess, sys, tarfile, urllib.request\nif not importlib.util.find_spec("researchweave") or not importlib.util.find_spec("agentscope"):\n    urllib.request.urlretrieve(os.environ["RESEARCHWEAVE_ARCHIVE_URL"], "/tmp/rw.tar.gz")\n    with tarfile.open("/tmp/rw.tar.gz") as tf:\n        tf.extractall("/tmp/rw")\n    src_dir = str(next(pathlib.Path("/tmp/rw").iterdir()))\n    subprocess.check_call([sys.executable, "-m", "pip", "install", "--no-cache-dir", src_dir])\nos.execvp(sys.executable, [sys.executable, "-m", "researchweave.server"])'
           ]
           resources: {
             cpu: json('1.0')

@@ -98,7 +98,7 @@ class FoundryModelAdapter:
         requested_model: str,
         system_prompt: str,
         user_prompt: str,
-        max_tokens: int = 320,
+        max_tokens: int = 1500,
     ) -> tuple[str | None, str]:
         """Invoke the Foundry model pool with automatic fallback across deployed models."""
         if self._client is None:
@@ -1083,12 +1083,29 @@ class ResearchCoordinator:
             )
             task.result_summary = f"Extracted baseline entities, relations, and source provenance for '{inv['title']}'."
 
+        lit_live, lit_dep = self.foundry.complete(
+            task.assigned_model or "gpt-6-astra",
+            system_prompt=(
+                "You are the Literature & Evidence Specialist in ResearchWeave. "
+                "Provide a concise (2-3 sentence) synthesis of the key scientific mechanisms and citations "
+                "extracted into the Company Brain for this objective."
+            ),
+            user_prompt=(
+                f"Investigation Title: {inv['title']}\n"
+                f"Objective: {inv['objective']}\n"
+                f"Extracted Baseline Summary: {task.result_summary}"
+            ),
+        )
+        if lit_live:
+            task.result_summary = f"{task.result_summary} [Foundry {lit_dep}]: {lit_live}"
+            task.assigned_model = lit_dep
+
         self.store.append_event(
             inv_id,
             "literature_extracted",
             task.assigned_agent_name or "Literature-Agent",
             task.result_summary or "Literature extraction complete.",
-            {"task_id": task.id},
+            {"task_id": task.id, "model": task.assigned_model},
         )
 
     def _execute_computation_task(
@@ -1262,18 +1279,20 @@ class ResearchCoordinator:
     ) -> None:
         inv_id = inv["id"]
         claims = self.store.list_claims([inv_id])
+        claims_digest = "\n".join(
+            f"- [{c.get('verification_state')}] {c.get('statement')}" for c in claims
+        )
         live_audit, used_dep = self.foundry.complete(
             task.assigned_model or "gpt-6.1-sol",
             system_prompt=(
                 "You are the Independent Epistemic Reviewer in ResearchWeave. "
-                "Provide a concise (1-2 sentence) epistemic audit note distinguishing what was verified by calculation/citation "
-                "from what remains an unverified hypothesis."
+                "Provide a concise (2-3 sentence) epistemic audit of the supplied claims, distinguishing "
+                "what was verified by calculation/citation from what remains an unverified hypothesis."
             ),
             user_prompt=(
                 f"Investigation: {inv['title']}\nObjective: {inv['objective']}\n"
-                f"Claims to audit: {len(claims)}"
+                f"Claims to audit:\n{claims_digest}"
             ),
-            max_tokens=220,
         )
         if live_audit:
             task.assigned_model = used_dep

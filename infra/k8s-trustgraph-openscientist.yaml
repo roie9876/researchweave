@@ -89,13 +89,18 @@ spec:
           image: docker.io/library/cassandra:5.0
           ports:
             - containerPort: 9042
+          env:
+            - name: MAX_HEAP_SIZE
+              value: "2048M"
+            - name: HEAP_NEWSIZE
+              value: "512M"
           resources:
             requests:
+              cpu: "1000m"
+              memory: "4Gi"
+            limits:
               cpu: "2000m"
               memory: "8Gi"
-            limits:
-              cpu: "4000m"
-              memory: "16Gi"
           volumeMounts:
             - name: cassandra-data
               mountPath: /var/lib/cassandra

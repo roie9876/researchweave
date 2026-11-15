@@ -116,7 +116,7 @@ metadata:
   name: researchweave-workspace
   namespace: researchweave
 spec:
-  replicas: 2
+  replicas: 1
   selector:
     matchLabels:
       app: researchweave-workspace

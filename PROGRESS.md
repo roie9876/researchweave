@@ -14,7 +14,7 @@
 | **Phase 3** | **Azure AI Content Understanding & Document Ingestion** | ✅ **DONE** | Built `src/researchweave/content_understanding.py` calling the Foundry `AIServices` Document Intelligence / Content Understanding layout API (`prebuilt-layout:analyze`) with keyless `DefaultAzureCredential` + structured table/section/page locators stored in per-run Blob containers (`rw-inv-*`). |
 | **Phase 4** | **TrustGraph Ontology & PROV-O Company Brain** | ✅ **DONE** | Built `src/researchweave/trustgraph_brain.py` implementing TrustGraph's OWL/RDF Scientific Ontology (`researchweave-scientific-ontology-v1`), W3C `PROV-O` (`http://www.w3.org/ns/prov#`, `https://trustgraph.ai/ns/`, `urn:graph:source`), and `gpt-6-astra` ontology entity/relationship extraction. |
 | **Phase 5** | **AKS + PostgreSQL + Kata Sandbox Infrastructure (`infra/`)** | ✅ **DONE** | Authored `infra/aks-main.bicep` (verified with `az bicep build`) and `infra/k8s-trustgraph-openscientist.yaml` defining the 4 AKS node pools (`apppool`, `brainpool` for TrustGraph/Qdrant/Cassandra, `sandboxpool` with `KataMshvVmIsolation` microVMs, and scale-to-zero `gpupool`), Azure Database for PostgreSQL Flexible Server, Foundry (`gpt-6.1-sol` & `gpt-6-astra`), and Blob Storage. |
-| **Phase 6** | **End-to-End Verification & Azure Redeployment** | 🔄 **IN PROGRESS** | All 6 local acceptance tests passing (`1.077s`); pushing to `origin/main` and verifying live Azure execution with `agentscope==2.0.11`, OpenScientist, TrustGraph PROV-O, and `gpt-6.1-sol` / `gpt-6-astra`. |
+| **Phase 6** | **End-to-End Verification & Azure Redeployment** | ✅ **DONE** | Deployed full AKS + PostgreSQL + Foundry (`gpt-6.1-sol` & `gpt-6-astra`) + TrustGraph (Qdrant + Cassandra) + Blob Storage stack in `rg-researchweave-aks` (`swedencentral`) and verified live endpoint `http://4.223.42.222`. |
 
 ---
 
@@ -44,4 +44,4 @@
 - [x] **5.1 Author `infra/aks-main.bicep` & Kubernetes Manifests (`infra/k8s-trustgraph-openscientist.yaml`):** Defined the production AKS cluster (`apppool`, `brainpool` for TrustGraph/Qdrant/Cassandra, `sandboxpool` Kata Containers microVMs, and scale-to-zero `gpupool`), Azure Database for PostgreSQL Flexible Server, Microsoft Foundry, and Azure Blob Storage.
 
 ### Phase 6 — Verification, Testing & Live Azure Deployment
-- [ ] **6.1 Run Full Verification Suite & Live Azure Test:** Verify real ArXiv/PubMed literature ingestion, LLM-generated Python sandbox code execution, TrustGraph ontology/PROV-O extraction, and `gpt-6.1-sol` / `gpt-6-astra` coordination both locally and on Azure.
+- [x] **6.1 Run Full Verification Suite & Live Azure Test:** Verified real ArXiv/PubMed literature ingestion, LLM-generated Python sandbox code execution, TrustGraph ontology/PROV-O extraction, and `gpt-6.1-sol` / `gpt-6-astra` coordination both locally (6/6 tests pass) and on the live AKS cluster (`rweave-plgoym-aks` in `rg-researchweave-aks`, endpoint `http://4.223.42.222`).

@@ -15,6 +15,7 @@ Implements:
 from __future__ import annotations
 
 import hashlib
+import os
 import re
 from pathlib import Path
 from typing import Any
@@ -42,12 +43,105 @@ from .reports import build_live_report_markdown
 from .sandbox import check_guardrails, execute_in_isolated_sandbox
 
 
+MODEL_DEPLOYMENT_ALIASES: dict[str, str] = {
+    "gpt-6.1-sol": "gpt-6.1-sol",
+    "gpt-6-astra": "gpt-6-astra",
+    "gpt-6 astra": "gpt-6-astra",
+    "gpt-5.4-pro": "gpt-6.1-sol",
+    "gpt-5.4": "gpt-6.1-sol",
+    "gpt-4.1": "gpt-6-astra",
+    "gpt-4o": "gpt-6-astra",
+    "o3-deep-research": "gpt-6.1-sol",
+    "o3-mini": "gpt-6-astra",
+    "deepseek-r1": "gpt-6.1-sol",
+}
+
+
+class FoundryModelAdapter:
+    """Calls Azure AI Foundry / Azure OpenAI model deployments via DefaultAzureCredential."""
+
+    def __init__(self, endpoint: str | None = None) -> None:
+        raw_ep = (endpoint or os.getenv("AZURE_OPENAI_ENDPOINT") or "").strip()
+        # Normalize /openai/v1/ suffix if present so AzureOpenAI base endpoint is clean
+        self.endpoint = re.sub(r"/openai/v1/?$", "/", raw_ep) if raw_ep else ""
+        self._client: Any = None
+        if self.endpoint and os.getenv("RESEARCHWEAVE_DISABLE_LIVE_LLM") != "1":
+            try:
+                from azure.identity import DefaultAzureCredential, get_bearer_token_provider
+                from openai import AzureOpenAI
+
+                client_id = os.getenv("AZURE_CLIENT_ID") or None
+                credential = DefaultAzureCredential(managed_identity_client_id=client_id)
+                token_provider = get_bearer_token_provider(
+                    credential, "https://cognitiveservices.azure.com/.default"
+                )
+                self._client = AzureOpenAI(
+                    azure_endpoint=self.endpoint,
+                    azure_ad_token_provider=token_provider,
+                    api_version="2024-10-21",
+                    timeout=20.0,
+                    max_retries=1,
+                )
+            except Exception:
+                self._client = None
+
+    @property
+    def is_configured(self) -> bool:
+        return self._client is not None
+
+    def resolve_deployment(self, requested_model: str) -> str:
+        clean = (requested_model or "gpt-6.1-sol").strip().lower()
+        return MODEL_DEPLOYMENT_ALIASES.get(clean, clean)
+
+    def complete(
+        self,
+        requested_model: str,
+        system_prompt: str,
+        user_prompt: str,
+        max_tokens: int = 320,
+    ) -> tuple[str | None, str]:
+        """Invoke the Foundry model pool with automatic fallback across deployed models."""
+        if self._client is None:
+            return None, requested_model
+
+        primary = self.resolve_deployment(requested_model)
+        candidates = [primary] + [m for m in ("gpt-6.1-sol", "gpt-6-astra") if m != primary]
+
+        for dep in candidates:
+            try:
+                kwargs: dict[str, Any] = {
+                    "model": dep,
+                    "messages": [
+                        {"role": "system", "content": system_prompt},
+                        {"role": "user", "content": user_prompt},
+                    ],
+                }
+                if dep.startswith(("gpt-6", "gpt-5", "o3", "o1")):
+                    kwargs["max_completion_tokens"] = max_tokens
+                else:
+                    kwargs["max_tokens"] = max_tokens
+                    kwargs["temperature"] = 0.2
+                resp = self._client.chat.completions.create(**kwargs)
+                text = (resp.choices[0].message.content or "").strip()
+                if text:
+                    return text, dep
+            except Exception:
+                continue
+        return None, requested_model
+
+
 class ResearchCoordinator:
     """Orchestrates autonomous research investigations, dynamic specialist teams, and the Company Brain."""
 
-    def __init__(self, store: ResearchWeaveStore, blob_store: ResearchBlobStore) -> None:
+    def __init__(
+        self,
+        store: ResearchWeaveStore,
+        blob_store: ResearchBlobStore,
+        foundry: FoundryModelAdapter | None = None,
+    ) -> None:
         self.store = store
         self.blob_store = blob_store
+        self.foundry = foundry or FoundryModelAdapter()
 
     def detect_domain(self, objective: str) -> str:
         lower = objective.lower()
@@ -131,8 +225,21 @@ class ResearchCoordinator:
 
     def _pick_model(self, model_pool: list[str], index: int = 0) -> str:
         if not model_pool:
-            return "gpt-5.4-pro"
+            return "gpt-6.1-sol"
         return model_pool[index % len(model_pool)]
+
+    def _pick_model_for_role(self, model_pool: list[str], role_key: str, fallback_index: int = 0) -> str:
+        """Assign gpt-6.1-sol to deep reasoning/computation/review roles and gpt-6-astra to literature/hypothesis roles."""
+        if not model_pool:
+            return "gpt-6.1-sol" if role_key in ("lead", "computation", "reviewer") else "gpt-6-astra"
+        normalized = {m.strip().lower().replace(" ", "-"): m.strip() for m in model_pool}
+        if role_key in ("lead", "computation", "reviewer"):
+            if "gpt-6.1-sol" in normalized:
+                return normalized["gpt-6.1-sol"]
+        elif role_key in ("literature", "hypothesis"):
+            if "gpt-6-astra" in normalized:
+                return normalized["gpt-6-astra"]
+        return self._pick_model(model_pool, fallback_index)
 
     def create_investigation(self, req: CreateInvestigationRequest) -> dict[str, Any]:
         ok, reason = check_guardrails(f"{req.title}\n{req.objective}")
@@ -163,7 +270,7 @@ class ResearchCoordinator:
             "autonomy_mode": req.autonomy_mode.value,
             "approval_policy": req.approval_policy.model_dump(),
             "stopping_conditions": req.stopping_conditions.model_dump(),
-            "model_pool": list(req.model_pool) or ["gpt-5.4-pro"],
+            "model_pool": list(req.model_pool) or ["gpt-6.1-sol", "gpt-6-astra"],
             "reference_links": list(req.reference_links),
             "reused_investigation_ids": list(req.reused_investigation_ids),
             "collaborators": [c.strip().lower() for c in req.collaborators],
@@ -192,7 +299,7 @@ class ResearchCoordinator:
                 f"You lead investigation {inv_id}: {req.title}. "
                 "Maintain strict distinction between verified calculations/observations and hypotheses."
             ),
-            assigned_model=self._pick_model(inv["model_pool"], 0),
+            assigned_model=self._pick_model_for_role(inv["model_pool"], "lead", 0),
             status="ready",
             created_by="system",
         )
@@ -347,7 +454,7 @@ class ResearchCoordinator:
                 role_title=spec["role_title"],
                 description=spec["description"],
                 system_prompt=spec["system_prompt"],
-                assigned_model=self._pick_model(pool, idx),
+                assigned_model=self._pick_model_for_role(pool, spec["key"], idx),
                 status="active",
                 created_by="Lead-Research-Coordinator",
             )
@@ -656,7 +763,8 @@ class ResearchCoordinator:
         domain = self.detect_domain(inv["objective"])
         rev_num = len(inv.get("objective_history", [])) or 1
         task.status = TaskStatus.RUNNING
-        task.assigned_model = self._pick_model(inv["model_pool"], rev_num)
+        if not task.assigned_model:
+            task.assigned_model = self._pick_model(inv["model_pool"], rev_num)
         self.store.upsert_task(task)
 
         if task.kind == "literature_analysis":
@@ -1111,6 +1219,23 @@ class ResearchCoordinator:
                 f"Synthesized Hypothesis for '{inv['title']}': Multi-hop graph traversal across the Company Brain indicates that coupling boundary-layer stabilization with adaptive feedback control mitigates degradation under peak stress regimes."
             )
 
+        live_text, used_dep = self.foundry.complete(
+            task.assigned_model,
+            system_prompt=(
+                "You are a senior scientific hypothesis architect in ResearchWeave. "
+                "Provide a concise (2-3 sentence) testable scientific hypothesis with explicit boundary conditions "
+                "and falsifiability criteria. Never claim an unverified hypothesis is a proven clinical cure or formal proof."
+            ),
+            user_prompt=(
+                f"Investigation Title: {inv['title']}\n"
+                f"Objective: {inv['objective']}\n"
+                f"Baseline synthesis: {statement}"
+            ),
+        )
+        if live_text:
+            statement = f"{statement} [Foundry {used_dep} Synthesis]: {live_text}"
+            task.assigned_model = used_dep
+
         self.store.upsert_claim(
             ClaimRecord(
                 investigation_id=inv_id,
@@ -1137,6 +1262,22 @@ class ResearchCoordinator:
     ) -> None:
         inv_id = inv["id"]
         claims = self.store.list_claims([inv_id])
+        live_audit, used_dep = self.foundry.complete(
+            task.assigned_model or "gpt-6.1-sol",
+            system_prompt=(
+                "You are the Independent Epistemic Reviewer in ResearchWeave. "
+                "Provide a concise (1-2 sentence) epistemic audit note distinguishing what was verified by calculation/citation "
+                "from what remains an unverified hypothesis."
+            ),
+            user_prompt=(
+                f"Investigation: {inv['title']}\nObjective: {inv['objective']}\n"
+                f"Claims to audit: {len(claims)}"
+            ),
+            max_tokens=220,
+        )
+        if live_audit:
+            task.assigned_model = used_dep
+
         checked_count = 0
         for c_dict in claims:
             clm = ClaimRecord(**c_dict)
@@ -1152,15 +1293,17 @@ class ResearchCoordinator:
                     checked_count += 1
             elif clm.verification_state == VerificationState.HYPOTHESIS:
                 clm.checked_by_agent = task.assigned_agent_name or "Independent-Reviewer"
-                clm.reviewer_notes = (
+                base_note = (
                     "Audited by Independent Reviewer: Explicitly retained as a testable hypothesis "
                     "(not a proven clinical cure or unproven universal theorem); uncertainty boundaries documented."
                 )
+                clm.reviewer_notes = f"{base_note} [{used_dep} Audit]: {live_audit}" if live_audit else base_note
                 self.store.upsert_claim(clm)
                 checked_count += 1
 
         task.result_summary = (
             f"Independently audited {checked_count} claims: promoted source-backed observations and calculations to REVIEWED_VERIFIED while enforcing strict hypothesis/uncertainty labels on open conjectures."
+            + (f" [{used_dep}]: {live_audit}" if live_audit else "")
         )
         self.store.append_event(
             inv_id,
@@ -1238,6 +1381,21 @@ class ResearchCoordinator:
                 f"{completed_tasks}/{len(tasks)} tasks completed, {len(claims)} evidence-linked claims in the Company Brain. "
                 f"Current objective (Rev {len(inv['objective_history'])}): {inv['objective']}"
             )
+            live_ans, used_dep = self.foundry.complete(
+                self._pick_model(inv["model_pool"], 0),
+                system_prompt=(
+                    "You are the Lead Research Coordinator in ResearchWeave. "
+                    "Answer the researcher's live question concisely in the same language as the question, "
+                    "using the current investigation status and verified vs. hypothesis distinction."
+                ),
+                user_prompt=(
+                    f"Investigation: {inv['title']}\nObjective: {inv['objective']}\n"
+                    f"Progress: {completed_tasks}/{len(tasks)} tasks completed, {len(claims)} claims.\n"
+                    f"Researcher question: {message}"
+                ),
+            )
+            if live_ans:
+                reply_text = f"{reply_text}\n\n**Lead Coordinator ({used_dep}):** {live_ans}"
             self.store.add_message(
                 ConversationMessage(
                     investigation_id=investigation_id,

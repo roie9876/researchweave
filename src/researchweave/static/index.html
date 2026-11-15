@@ -385,7 +385,7 @@
               <option value="approval_required">Require Human Approval Before Major Actions</option>
             </select>
             <label id="lbl-models">Allowed Azure Foundry Model Pool (comma-separated)</label>
-            <input id="new-models" type="text" value="gpt-5.4-pro, gpt-4.1, o3-deep-research" />
+            <input id="new-models" type="text" value="gpt-6.1-sol, gpt-6-astra" />
             <label id="lbl-max-hours">Max Runtime Hours (blank = no limit by default)</label>
             <input id="new-max-hours" type="number" step="0.5" placeholder="Optional (e.g., 48 or 240)" />
             <label id="lbl-max-budget">Max Budget USD (blank = no limit by default)</label>
@@ -669,7 +669,7 @@ Ambroxol_Analog,1.68,0.44</textarea>
         language: currentLang,
         report_language: currentLang,
         autonomy_mode: document.getElementById("new-autonomy").value,
-        model_pool: modelsRaw ? modelsRaw.split(",").map(s => s.trim()).filter(Boolean) : ["gpt-5.4-pro"],
+        model_pool: modelsRaw ? modelsRaw.split(",").map(s => s.trim()).filter(Boolean) : ["gpt-6.1-sol", "gpt-6-astra"],
         reference_links: linksRaw ? linksRaw.split(",").map(s => s.trim()).filter(Boolean) : [],
         reused_investigation_ids: reuseRaw ? reuseRaw.split(",").map(s => s.trim()).filter(Boolean) : [],
         stopping_conditions: {

@@ -100,12 +100,13 @@ def create_http_handler(app: ResearchWeaveApp) -> type[BaseHTTPRequestHandler]:
                             "service": "researchweave",
                             "version": "0.1.0",
                             "available_models": [
-                                "gpt-5.4-pro",
-                                "gpt-4.1",
-                                "o3-deep-research",
-                                "gpt-4o",
-                                "deepseek-r1",
+                                "gpt-6.1-sol",
+                                "gpt-6-astra",
                             ],
+                            "foundry_configured": app.coordinator.foundry.is_configured,
+                            "foundry_endpoint": app.coordinator.foundry.endpoint or None,
+                            "blob_storage_connected": app.blob_store._blob_service_client is not None,
+                            "blob_storage_url": app.blob_store.storage_account_url or None,
                         }
                     )
                     return

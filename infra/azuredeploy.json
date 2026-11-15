@@ -5,7 +5,7 @@
     "_generator": {
       "name": "bicep",
       "version": "0.44.1.10279",
-      "templateHash": "12940114262546796215"
+      "templateHash": "6971869205557124789"
     }
   },
   "parameters": {
@@ -58,6 +58,22 @@
     "aiServicesName": "[format('{0}-{1}-foundry', parameters('appPrefix'), variables('uniqueSuffix'))]",
     "commonTags": "[union(createObject('application', 'ResearchWeave', 'managedBy', 'Bicep-ARM-DeployToAzure'), if(parameters('allowPublicEndpointTag'), createObject('SecurityControl', 'Ignore'), createObject()))]",
     "storageBlobDataContributorRoleId": "[subscriptionResourceId('Microsoft.Authorization/roleDefinitions', 'ba92f5b4-2d11-453d-a403-e96b0029c9fe')]",
+    "modelDeployments": [
+      {
+        "name": "gpt-6.1-sol",
+        "modelName": "gpt-6.1-sol",
+        "modelVersion": "2026-09-29",
+        "skuName": "GlobalStandard",
+        "capacity": 100
+      },
+      {
+        "name": "gpt-6-astra",
+        "modelName": "gpt-6-astra",
+        "modelVersion": "2026-09-03",
+        "skuName": "GlobalStandard",
+        "capacity": 100
+      }
+    ],
     "cognitiveServicesOpenAIUserRoleId": "[subscriptionResourceId('Microsoft.Authorization/roleDefinitions', '5e0bd9bd-7b93-4f28-af87-19fc36ad61bd')]"
   },
   "resources": [
@@ -144,6 +160,31 @@
       }
     },
     {
+      "copy": {
+        "name": "aiModelDeployments",
+        "count": "[length(variables('modelDeployments'))]",
+        "mode": "serial",
+        "batchSize": 1
+      },
+      "type": "Microsoft.CognitiveServices/accounts/deployments",
+      "apiVersion": "2023-05-01",
+      "name": "[format('{0}/{1}', variables('aiServicesName'), variables('modelDeployments')[copyIndex()].name)]",
+      "sku": {
+        "name": "[variables('modelDeployments')[copyIndex()].skuName]",
+        "capacity": "[variables('modelDeployments')[copyIndex()].capacity]"
+      },
+      "properties": {
+        "model": {
+          "format": "OpenAI",
+          "name": "[variables('modelDeployments')[copyIndex()].modelName]",
+          "version": "[variables('modelDeployments')[copyIndex()].modelVersion]"
+        }
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.CognitiveServices/accounts', variables('aiServicesName'))]"
+      ]
+    },
+    {
       "type": "Microsoft.Authorization/roleAssignments",
       "apiVersion": "2022-04-01",
       "scope": "[resourceId('Microsoft.CognitiveServices/accounts', variables('aiServicesName'))]",
@@ -226,6 +267,10 @@
                   "value": "[parameters('repoArchiveUrl')]"
                 },
                 {
+                  "name": "MODEL_POOL_DEFAULT",
+                  "value": "gpt-6.1-sol,gpt-6-astra"
+                },
+                {
                   "name": "AZURE_CLIENT_ID",
                   "value": "[reference(resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', variables('managedIdentityName')), '2023-01-31').clientId]"
                 },
@@ -271,6 +316,13 @@
     "foundryEndpoint": {
       "type": "string",
       "value": "[reference(resourceId('Microsoft.CognitiveServices/accounts', variables('aiServicesName')), '2023-05-01').endpoint]"
+    },
+    "foundryDeployedModels": {
+      "type": "array",
+      "copy": {
+        "count": "[length(variables('modelDeployments'))]",
+        "input": "[variables('modelDeployments')[copyIndex()].name]"
+      }
     },
     "managedIdentityClientId": {
       "type": "string",

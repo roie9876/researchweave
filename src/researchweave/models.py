@@ -215,7 +215,7 @@ class CreateInvestigationRequest(BaseModel):
     approval_policy: ApprovalPolicy = Field(default_factory=ApprovalPolicy)
     stopping_conditions: StoppingConditions = Field(default_factory=StoppingConditions)
     model_pool: list[str] = Field(
-        default_factory=lambda: ["gpt-5.4-pro", "gpt-4.1", "o3-deep-research"]
+        default_factory=lambda: ["gpt-6.1-sol", "gpt-6-astra"]
     )
     reference_links: list[str] = Field(default_factory=list)
     reused_investigation_ids: list[str] = Field(default_factory=list)

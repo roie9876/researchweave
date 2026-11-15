@@ -109,6 +109,40 @@ resource aiServices 'Microsoft.CognitiveServices/accounts@2023-05-01' = {
   }
 }
 
+var modelDeployments = [
+  {
+    name: 'gpt-6.1-sol'
+    modelName: 'gpt-6.1-sol'
+    modelVersion: '2026-09-29'
+    skuName: 'GlobalStandard'
+    capacity: 100
+  }
+  {
+    name: 'gpt-6-astra'
+    modelName: 'gpt-6-astra'
+    modelVersion: '2026-09-03'
+    skuName: 'GlobalStandard'
+    capacity: 100
+  }
+]
+
+@batchSize(1)
+resource aiModelDeployments 'Microsoft.CognitiveServices/accounts/deployments@2023-05-01' = [for m in modelDeployments: {
+  parent: aiServices
+  name: m.name
+  sku: {
+    name: m.skuName
+    capacity: m.capacity
+  }
+  properties: {
+    model: {
+      format: 'OpenAI'
+      name: m.modelName
+      version: m.modelVersion
+    }
+  }
+}]
+
 var cognitiveServicesOpenAIUserRoleId = subscriptionResourceId(
   'Microsoft.Authorization/roleDefinitions',
   '5e0bd9bd-7b93-4f28-af87-19fc36ad61bd'
@@ -186,6 +220,10 @@ resource containerApp 'Microsoft.App/containerApps@2024-03-01' = {
               value: repoArchiveUrl
             }
             {
+              name: 'MODEL_POOL_DEFAULT'
+              value: 'gpt-6.1-sol,gpt-6-astra'
+            }
+            {
               name: 'AZURE_CLIENT_ID'
               value: managedIdentity.properties.clientId
             }
@@ -215,4 +253,5 @@ resource containerApp 'Microsoft.App/containerApps@2024-03-01' = {
 output webWorkspaceUrl string = 'https://${containerApp.properties.configuration.ingress.fqdn}'
 output storageBlobEndpoint string = storageAccount.properties.primaryEndpoints.blob
 output foundryEndpoint string = aiServices.properties.endpoint
+output foundryDeployedModels array = [for m in modelDeployments: m.name]
 output managedIdentityClientId string = managedIdentity.properties.clientId

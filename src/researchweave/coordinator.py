@@ -194,7 +194,9 @@ class ResearchCoordinator:
         self.blob_store = blob_store
         self.foundry = foundry or FoundryModelAdapter()
         self.agentscope_runtime = AgentScopeTeamRuntime(self.foundry)
-        self.content_understanding = AzureContentUnderstandingService(self.foundry.endpoint)
+        self.content_understanding = AzureContentUnderstandingService(
+            self.foundry.endpoint, foundry_adapter=self.foundry
+        )
 
     def detect_domain(self, objective: str) -> str:
         lower = objective.lower()
@@ -1314,6 +1316,13 @@ class ResearchCoordinator:
             )
             task.result_summary = f"Extracted baseline entities, relations, and source provenance for '{inv['title']}'."
 
+        # Gather any uploaded documents (PDFs, medical photos, CSVs) already ingested into this investigation
+        existing_sources = self.store.list_sources(inv_id)
+        uploaded_sources = [s for s in existing_sources if s.get("source_type") == "uploaded_file"]
+        uploaded_excerpts = "\n\n".join(
+            f"- [{s['id']}] {s['title']}: {s.get('excerpt', '')}" for s in uploaded_sources
+        )
+
         # Live OpenScientist literature search (PubMed / ArXiv) when online with Foundry
         if self.foundry.is_configured:
             live_papers = (
@@ -1342,15 +1351,16 @@ class ResearchCoordinator:
             name=task.assigned_agent_name or "Literature-Agent",
             system_prompt=(
                 "You are the Literature & Evidence Specialist in ResearchWeave (running on AgentScope 2.0 + OpenScientist). "
-                "Provide a concise (2-3 sentence) synthesis of the key scientific/mathematical mechanisms and citations "
-                "for the user's EXACT objective in the same language as the objective. "
+                "Provide a concise (2-4 sentence) synthesis of the key scientific/medical/mathematical mechanisms, uploaded lab/document findings, "
+                "and citations for the user's EXACT objective in the same language as the objective. "
                 "Use standard LaTeX math notation ($...$ for inline equations and $$...$$ for display equations) for all formulas."
             ),
             assigned_model=task.assigned_model or "gpt-6-astra",
             user_prompt=(
                 f"Investigation Title: {inv['title']}\n"
                 f"Objective: {inv['objective']}\n"
-                f"Extracted Baseline Summary: {task.result_summary}"
+                f"Extracted Baseline Summary: {task.result_summary}\n"
+                + (f"Uploaded Medical/Scientific Documents:\n{uploaded_excerpts}\n" if uploaded_excerpts else "")
             ),
             fallback_text="",
         )
@@ -1541,20 +1551,26 @@ class ResearchCoordinator:
                 f"Synthesized Hypothesis for '{inv['title']}': Multi-hop graph traversal across the Company Brain indicates that coupling boundary-layer stabilization with adaptive feedback control mitigates degradation under peak stress regimes."
             )
 
+        uploaded_excerpts = "\n\n".join(
+            f"- [{s['id']}] {s['title']}: {s.get('excerpt', '')}"
+            for s in sources
+            if s.get("source_type") == "uploaded_file"
+        )
         live_text, used_dep, used_live, hyp_usage = self.agentscope_runtime.run_specialist_turn(
             agent_id=task.assigned_agent_id or f"hyp-{inv_id}",
             name=task.assigned_agent_name or "Hypothesis-Architect",
             system_prompt=(
-                "You are a senior scientific/mathematical hypothesis architect in ResearchWeave (running on AgentScope 2.0). "
-                "Provide a concise (2-3 sentence) testable hypothesis with explicit boundary conditions and falsifiability criteria "
+                "You are a senior scientific/medical/mathematical hypothesis architect in ResearchWeave (running on AgentScope 2.0). "
+                "Provide a concise (2-4 sentence) testable hypothesis with explicit boundary conditions, differential factors (e.g. ferritin/iron, thyroid TSH, vitamin D, hormonal/genetic factors when relevant), and falsifiability criteria "
                 "in the same language as the user's objective. Use standard LaTeX math notation ($...$ and $$...$$) for all equations. "
-                "Never claim an unverified hypothesis is a proven clinical cure or formal proof."
+                "Never claim an unverified hypothesis is a proven clinical diagnosis or cure."
             ),
             assigned_model=task.assigned_model or "gpt-6-astra",
             user_prompt=(
                 f"Investigation Title: {inv['title']}\n"
                 f"Objective: {inv['objective']}\n"
-                f"Baseline synthesis: {statement}"
+                f"Baseline synthesis: {statement}\n"
+                + (f"Uploaded Medical/Scientific Documents:\n{uploaded_excerpts}\n" if uploaded_excerpts else "")
             ),
             fallback_text="",
         )
@@ -1831,16 +1847,25 @@ class ResearchCoordinator:
         self,
         investigation_id: str,
         filename: str,
-        content_text: str,
+        content_text: str = "",
         content_type: str = "text/plain",
         uploaded_by: str = "researcher@researchweave.local",
+        content_base64: str | None = None,
     ) -> dict[str, Any]:
-        """Store an uploaded document/dataset in the run's Blob container and extract entities into the Company Brain."""
+        """Store an uploaded PDF, image, or dataset in the run's Blob container and extract entities into the Company Brain."""
         inv = self.store.get_investigation(investigation_id)
         if not inv:
             raise KeyError(f"Investigation {investigation_id} not found.")
 
-        raw_bytes = content_text.encode("utf-8")
+        if content_base64:
+            import base64
+
+            # Strip optional data:...;base64, prefix
+            b64_clean = content_base64.split(",", 1)[-1].strip()
+            raw_bytes = base64.b64decode(b64_clean)
+        else:
+            raw_bytes = content_text.encode("utf-8")
+
         artifact = self.blob_store.store_artifact(
             investigation_id,
             filename,
@@ -1849,7 +1874,7 @@ class ResearchCoordinator:
             metadata={"uploaded_by": uploaded_by},
         )
 
-        # Parse document structure, tables, and page/chunk locators via Azure AI Content Understanding
+        # Parse document structure, tables, and page/chunk locators via Azure AI Content Understanding / Vision
         cu_result = self.content_understanding.analyze_document(
             filename=filename,
             raw_bytes=raw_bytes,

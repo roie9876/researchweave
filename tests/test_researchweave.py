@@ -318,5 +318,19 @@ class ResearchWeaveAcceptanceTests(unittest.TestCase):
         self.assertGreaterEqual(pi_done["metrics"]["total_tokens"], 1)
 
 
+        # Verify binary PDF / base64 upload via content_base64
+        import base64
+
+        fake_pdf_bytes = b"%PDF-1.4\nstream\n(Ferritin 12 ng/mL TSH 2.4 mIU/L Vitamin D 16 ng/mL)\nendstream\n%%EOF"
+        pdf_upload = self.app.coordinator.ingest_uploaded_file(
+            pi_bundle["investigation"]["id"],
+            filename="blood_panel_report.pdf",
+            content_type="application/pdf",
+            content_base64=base64.b64encode(fake_pdf_bytes).decode("ascii"),
+        )
+        self.assertEqual(pdf_upload["source"]["title"], "Uploaded File: blood_panel_report.pdf")
+        self.assertIn("Ferritin", pdf_upload["source"]["excerpt"])
+
+
 if __name__ == "__main__":
     unittest.main()

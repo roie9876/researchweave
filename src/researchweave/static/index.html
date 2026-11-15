@@ -421,6 +421,10 @@
           <label id="lbl-inv-links">Reference Public Links (optional, comma-separated)</label>
           <input id="new-links" type="text" placeholder="https://arxiv.org/abs/..., https://doi.org/..." />
         </div>
+        <div class="form-row">
+          <label id="lbl-initial-files">Attach Medical / Scientific Files (PDF, Images, CSV — multi-select)</label>
+          <input id="new-files" type="file" multiple accept=".pdf,.png,.jpg,.jpeg,.webp,.tiff,.tif,.csv,.txt,.md,.json" style="font-size:12px;padding:6px;" />
+        </div>
 
         <details style="margin-bottom:12px;font-size:13px;">
           <summary style="cursor:pointer;color:var(--accent);font-weight:600;" id="lbl-adv-config">Advanced Autonomy, Model Pool & Stopping Limits</summary>
@@ -585,18 +589,30 @@
         <div id="drawer-upload" class="drawer">
           <div class="card-grid">
             <div class="mini-card">
-              <h3 style="margin-bottom:8px;">Upload File to Run Blob Container</h3>
+              <h3 style="margin-bottom:8px;">Upload PDFs, Document Photos & Lab Files to Run Blob Container</h3>
               <div class="form-row">
-                <label>Filename (CSV, TXT, Markdown, JSON)</label>
-                <input id="upload-filename" type="text" value="experimental_measurements.csv" />
+                <label>Select Local Files (PDF, JPG, PNG, CSV, TXT — Multi-Select Supported)</label>
+                <input id="upload-file-picker" type="file" multiple accept=".pdf,.png,.jpg,.jpeg,.webp,.tiff,.tif,.csv,.txt,.md,.json" />
               </div>
-              <div class="form-row">
-                <label>File Content</label>
-                <textarea id="upload-content" rows="4">Compound,GCase_Activation,Oligomer_Ratio
-Control,1.00,1.00
-Ambroxol_Analog,1.68,0.44</textarea>
-              </div>
-              <button class="primary" onclick="uploadFileToRun()">Upload & Index into Company Brain</button>
+              <button class="primary" id="btn-upload-files" onclick="uploadSelectedFilesToRun()" style="width:100%;margin-bottom:12px;">
+                📤 Upload Selected PDF / Image Files & Extract via Content Understanding
+              </button>
+              <details style="font-size:12px;">
+                <summary style="cursor:pointer;color:var(--accent);">Or paste raw CSV / clinical text manually</summary>
+                <div class="form-row" style="margin-top:8px;">
+                  <label>Filename</label>
+                  <input id="upload-filename" type="text" value="lab_results.csv" />
+                </div>
+                <div class="form-row">
+                  <label>Text / CSV Content</label>
+                  <textarea id="upload-content" rows="3">Test,Value,Units,Reference_Range
+Ferritin,14,ng/mL,30-150
+TSH,2.1,mIU/L,0.4-4.0
+Vitamin_D_25OH,18,ng/mL,30-100</textarea>
+                </div>
+                <button onclick="uploadFileToRun()">Upload Pasted Text</button>
+              </details>
+              <div id="upload-status-msg" style="margin-top:8px;font-size:12px;color:var(--success);"></div>
             </div>
 
             <div class="mini-card">
@@ -757,6 +773,21 @@ Ambroxol_Analog,1.68,0.44</textarea>
         return;
       }
       currentInvId = data.investigation.id;
+
+      // If the user attached initial PDF / image / CSV files in the sidebar, upload them right away
+      const initialFilesInput = document.getElementById("new-files");
+      if (initialFilesInput && initialFilesInput.files && initialFilesInput.files.length > 0) {
+        await uploadFileList(currentInvId, initialFilesInput.files, owner);
+        initialFilesInput.value = "";
+        const refreshed = await fetch(`/api/investigations/${currentInvId}`);
+        if (refreshed.ok) {
+          const updatedBundle = await refreshed.json();
+          await loadInvestigations();
+          renderBundle(updatedBundle);
+          return;
+        }
+      }
+
       await loadInvestigations();
       renderBundle(data);
     }
@@ -858,6 +889,69 @@ Ambroxol_Analog,1.68,0.44</textarea>
       document.getElementById("steer-new-obj").value = "";
       renderBundle(data);
       loadInvestigations();
+    }
+
+    function readFileAsBase64(file) {
+      return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => {
+          const result = String(reader.result || "");
+          const base64 = result.includes(",") ? result.split(",", 2)[1] : result;
+          resolve(base64);
+        };
+        reader.onerror = () => reject(reader.error);
+        reader.readAsDataURL(file);
+      });
+    }
+
+    async function uploadFileList(invId, fileList, uploadedBy) {
+      const statusEl = document.getElementById("upload-status-msg");
+      for (let i = 0; i < fileList.length; i++) {
+        const f = fileList[i];
+        if (statusEl) {
+          statusEl.textContent = `⏳ Uploading & analyzing (${i + 1}/${fileList.length}): ${f.name}...`;
+        }
+        const b64 = await readFileAsBase64(f);
+        const contentType = f.type || (f.name.toLowerCase().endsWith(".pdf") ? "application/pdf" : "application/octet-stream");
+        const res = await fetch(`/api/investigations/${invId}/upload`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            filename: f.name,
+            content_base64: b64,
+            content_type: contentType,
+            uploaded_by: uploadedBy
+          })
+        });
+        if (!res.ok) {
+          const err = await res.json();
+          throw new Error(err.error || `Failed to upload ${f.name}`);
+        }
+      }
+      if (statusEl) {
+        statusEl.textContent = `✅ Uploaded and indexed ${fileList.length} file(s) into Azure Blob & TrustGraph Company Brain.`;
+      }
+    }
+
+    async function uploadSelectedFilesToRun() {
+      if (!currentInvId) return;
+      const picker = document.getElementById("upload-file-picker");
+      if (!picker || !picker.files || picker.files.length === 0) {
+        alert("Please choose one or more PDF, image, or CSV files first.");
+        return;
+      }
+      const btn = document.getElementById("btn-upload-files");
+      const uploaded_by = document.getElementById("user-email").value.trim() || "researcher@researchweave.local";
+      try {
+        if (btn) btn.disabled = true;
+        await uploadFileList(currentInvId, picker.files, uploaded_by);
+        picker.value = "";
+        await selectInvestigation(currentInvId);
+      } catch (e) {
+        alert(e.message || "File upload failed.");
+      } finally {
+        if (btn) btn.disabled = false;
+      }
     }
 
     async function uploadFileToRun() {

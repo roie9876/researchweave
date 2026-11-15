@@ -256,6 +256,7 @@ class UpdateSettingsRequest(BaseModel):
 
 class UploadFileRequest(BaseModel):
     filename: str
-    content_text: str
+    content_text: str = ""
+    content_base64: str | None = None
     content_type: str = "text/plain"
     uploaded_by: str = "researcher@researchweave.local"

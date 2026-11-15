@@ -278,6 +278,7 @@ def create_http_handler(app: ResearchWeaveApp) -> type[BaseHTTPRequestHandler]:
                         content_text=req.content_text,
                         content_type=req.content_type,
                         uploaded_by=req.uploaded_by,
+                        content_base64=req.content_base64,
                     )
                     self._send_json(res, 201)
                     return

@@ -68,11 +68,12 @@ class ContentUnderstandingResult:
 
 
 class AzureContentUnderstandingService:
-    """Calls Azure AI Content Understanding / Document Intelligence on the Foundry AIServices resource."""
+    """Calls Azure AI Content Understanding / Document Intelligence & Vision on the Foundry AIServices resource."""
 
-    def __init__(self, endpoint: str | None = None) -> None:
+    def __init__(self, endpoint: str | None = None, foundry_adapter: Any = None) -> None:
         raw_ep = (endpoint or os.getenv("AZURE_OPENAI_ENDPOINT") or "").strip()
         self.endpoint = re.sub(r"/openai/v1/?$", "", raw_ep).rstrip("/") if raw_ep else ""
+        self.foundry_adapter = foundry_adapter
 
     def _get_bearer_token(self) -> str | None:
         if not self.endpoint or os.getenv("RESEARCHWEAVE_DISABLE_LIVE_LLM") == "1":
@@ -93,19 +94,100 @@ class AzureContentUnderstandingService:
         raw_bytes: bytes,
         content_type: str = "text/plain",
     ) -> ContentUnderstandingResult:
-        """Analyze an uploaded PDF, CSV, or scientific document with page/section/table locators."""
-        # Try calling Azure AI Content Understanding / Document Intelligence Layout API first for PDF/binary docs
+        """Analyze an uploaded PDF, image (PNG/JPG/WEBP/TIFF), CSV, or scientific document with page/section/table locators."""
+        lower_name = filename.lower()
+        lower_ct = (content_type or "").lower()
+        is_pdf = lower_name.endswith(".pdf") or "pdf" in lower_ct
+        is_image = lower_name.endswith((".png", ".jpg", ".jpeg", ".webp", ".tiff", ".tif", ".bmp")) or lower_ct.startswith("image/")
+
+        # 1. Try Azure AI Content Understanding / Document Intelligence prebuilt-layout for PDFs and images
         token = self._get_bearer_token()
-        if token and (filename.lower().endswith(".pdf") or content_type == "application/pdf"):
+        if token and (is_pdf or is_image):
             az_res = self._call_azure_layout_api(filename, raw_bytes, content_type, token)
-            if az_res is not None:
+            if az_res is not None and az_res.markdown_content.strip():
                 return az_res
 
-        # Structured scientific decoder for CSV, Markdown, and text documents (with Azure Content Understanding schema)
+        # 2. For medical/scientific document photos, also support multimodal vision OCR via gpt-6-astra / gpt-6.1-sol
+        if is_image and self.foundry_adapter and getattr(self.foundry_adapter, "_client", None) is not None:
+            vis_res = self._call_multimodal_vision_ocr(filename, raw_bytes, content_type)
+            if vis_res is not None:
+                return vis_res
+
+        # 3. For PDFs where layout API is offline/unavailable, extract printable text streams before falling back
+        if is_pdf:
+            pdf_text = self._extract_basic_pdf_text(raw_bytes)
+            if pdf_text.strip():
+                return self._parse_structured_text_or_markdown(filename, pdf_text, content_type)
+
+        # 4. Structured scientific decoder for CSV, Markdown, and text documents
         text = raw_bytes.decode("utf-8", errors="replace")
-        if filename.lower().endswith(".csv") or "csv" in content_type.lower():
+        if lower_name.endswith(".csv") or "csv" in lower_ct:
             return self._parse_csv_scientific(filename, text, content_type)
         return self._parse_structured_text_or_markdown(filename, text, content_type)
+
+    def _call_multimodal_vision_ocr(
+        self,
+        filename: str,
+        raw_bytes: bytes,
+        content_type: str,
+    ) -> ContentUnderstandingResult | None:
+        """Extract structured Markdown, lab tables, and clinical/scientific measurements from document photos using Foundry multimodal vision."""
+        import base64
+
+        b64 = base64.b64encode(raw_bytes).decode("ascii")
+        mime = content_type if content_type and content_type.startswith("image/") else "image/jpeg"
+        client = getattr(self.foundry_adapter, "_client", None)
+        if client is None:
+            return None
+        for dep in ("gpt-6-astra", "gpt-6.1-sol"):
+            try:
+                resp = client.chat.completions.create(
+                    model=dep,
+                    messages=[
+                        {
+                            "role": "system",
+                            "content": (
+                                "You are a medical and scientific document OCR & table extraction specialist. "
+                                "Transcribe all text, blood test / laboratory values, reference ranges, dates, and clinical notes "
+                                "from the image into clean Markdown (using Markdown tables for lab values). Preserve the original language (Hebrew/English)."
+                            ),
+                        },
+                        {
+                            "role": "user",
+                            "content": [
+                                {"type": "text", "text": f"Extract all text and tables from document image: {filename}"},
+                                {"type": "image_url", "image_url": {"url": f"data:{mime};base64,{b64}"}},
+                            ],
+                        },
+                    ],
+                    max_completion_tokens=1500,
+                )
+                md_text = (resp.choices[0].message.content or "").strip()
+                if md_text:
+                    res = self._parse_structured_text_or_markdown(filename, md_text, mime)
+                    res.analyzer_used = f"foundry_multimodal_vision_{dep}"
+                    return res
+            except Exception:
+                continue
+        return None
+
+    def _extract_basic_pdf_text(self, raw_bytes: bytes) -> str:
+        """Lightweight PDF text stream extractor when offline or when layout API is still warming up."""
+        import zlib
+
+        extracted: list[str] = []
+        # Extract literal strings inside parentheses in uncompressed or FlateDecode streams
+        for m in re.finditer(rb"stream[\r\n]+(.*?)[\r\n]+endstream", raw_bytes, flags=re.DOTALL):
+            stream_data = m.group(1)
+            try:
+                decompressed = zlib.decompress(stream_data)
+            except Exception:
+                decompressed = stream_data
+            for txt_m in re.finditer(rb"\(([^()]{2,200})\)", decompressed):
+                chunk = txt_m.group(1).decode("utf-8", errors="ignore").strip()
+                if any(c.isalpha() for c in chunk):
+                    extracted.append(chunk)
+        return "\n".join(extracted) if extracted else ""
 
     def _call_azure_layout_api(
         self,

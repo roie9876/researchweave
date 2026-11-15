@@ -2009,10 +2009,11 @@ class ResearchCoordinator:
             not update_objective
             and not added_sources
             and (
-                message.strip().endswith("?")
+                inv["status"] == InvestigationStatus.COMPLETED.value
+                or message.strip().endswith("?")
                 or any(
                     w in message.lower()
-                    for w in ("status", "progress", "why", "what", "מה", "איך", "איפה", "סטטוס")
+                    for w in ("status", "progress", "why", "what", "how", "explain", "מה", "איך", "איפה", "למה", "הסבר", "סטטוס", "דוח")
                 )
             )
         )
@@ -2020,27 +2021,55 @@ class ResearchCoordinator:
         if is_question_only:
             claims = self.store.list_claims([investigation_id])
             tasks = self.store.list_tasks(investigation_id)
+            sources = self.store.list_sources(investigation_id)
             completed_tasks = sum(1 for t in tasks if t["status"] == TaskStatus.COMPLETED.value)
-            reply_text = (
-                f"Live Status Update (without interrupting active workers): "
-                f"{completed_tasks}/{len(tasks)} tasks completed, {len(claims)} evidence-linked claims in the Company Brain. "
-                f"Current objective (Rev {len(inv['objective_history'])}): {inv['objective']}"
+            is_he = any("\u0590" <= ch <= "\u05ff" for ch in message) or inv.get("report_language", "en").lower().startswith("he")
+
+            claims_context = "\n\n".join(
+                f"- [{c.get('verification_state')}] {c.get('statement')[:900]}\n  Reviewer Audit: {(c.get('reviewer_notes') or '')[:600]}"
+                for c in claims
             )
-            live_ans, used_dep = self.foundry.complete(
-                self._pick_model(inv["model_pool"], 0),
+            sandbox_context = "\n".join(
+                f"Sandbox Code:\n{t.get('code_executed')}\nOutput: {t.get('code_output')}"
+                for t in tasks
+                if t.get("code_executed")
+            )
+            sources_context = "\n".join(
+                f"- [{s.get('id')}] {s.get('title')}: {(s.get('excerpt') or '')[:220]}"
+                for s in sources[:12]
+            )
+
+            lead_id = f"lead-{investigation_id}"
+            live_ans, used_dep, used_live, q_usage = self.agentscope_runtime.run_specialist_turn(
+                agent_id=lead_id,
+                name="Lead-Research-Coordinator",
                 system_prompt=(
                     "You are the Lead Research Coordinator in ResearchWeave. "
-                    "Answer the researcher's live question concisely in the same language as the question, "
-                    "using the current investigation status and verified vs. hypothesis distinction."
+                    "Answer the researcher's question about the investigation and its report thoroughly and accurately "
+                    "in the SAME language as the researcher's question. "
+                    "Cite the exact source IDs (`[src-...]`), sandbox outputs, and distinguish between verified findings and open hypotheses. "
+                    "Use standard LaTeX math notation ($...$ and $$...$$) for equations."
                 ),
+                assigned_model=self._pick_model_for_role(inv["model_pool"], "lead", 0),
                 user_prompt=(
                     f"Investigation: {inv['title']}\nObjective: {inv['objective']}\n"
-                    f"Progress: {completed_tasks}/{len(tasks)} tasks completed, {len(claims)} claims.\n"
-                    f"Researcher question: {message}"
+                    f"Status: {inv['status']} ({completed_tasks}/{len(tasks)} tasks completed)\n\n"
+                    f"Claims & Audit Notes:\n{claims_context}\n\n"
+                    f"Sandbox Computation:\n{sandbox_context}\n\n"
+                    f"Top Sources:\n{sources_context}\n\n"
+                    f"Researcher Question: {message}"
                 ),
+                fallback_text="",
             )
-            if live_ans:
-                reply_text = f"{reply_text}\n\n**Lead Coordinator ({used_dep}):** {live_ans}"
+            self._record_agent_usage(investigation_id, lead_id, q_usage)
+            if used_live and live_ans:
+                reply_text = live_ans
+            else:
+                reply_text = (
+                    f"עדכון חי (ללא עצירת משימות): הושלמו {completed_tasks}/{len(tasks)} משימות ו-{len(claims)} טענות במוח הארגוני. מטרה נוכחית (גרסה {len(inv['objective_history'])}): {inv['objective']}"
+                    if is_he
+                    else f"Live Status Update (without interrupting active workers): {completed_tasks}/{len(tasks)} tasks completed, {len(claims)} evidence-linked claims in the Company Brain. Current objective (Rev {len(inv['objective_history'])}): {inv['objective']}"
+                )
             self.store.add_message(
                 ConversationMessage(
                     investigation_id=investigation_id,
@@ -2125,7 +2154,9 @@ class ResearchCoordinator:
             },
         )
 
-        if inv["status"] == InvestigationStatus.RUNNING.value:
+        if inv["status"] in (InvestigationStatus.RUNNING.value, InvestigationStatus.COMPLETED.value):
+            inv["status"] = InvestigationStatus.RUNNING.value
+            self.store.save_investigation(inv)
             self.execute_research_step(investigation_id, max_tasks=1)
         else:
             self._refresh_report(investigation_id)

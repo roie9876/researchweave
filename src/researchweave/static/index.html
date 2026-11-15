@@ -1166,7 +1166,7 @@ Vitamin_D_25OH,18,ng/mL,30-100</textarea>
       (bundle.messages || []).forEach(msg => {
         const div = document.createElement("div");
         div.className = `msg ${msg.role}`;
-        div.innerHTML = `<strong>${escapeHtml(msg.sender)}</strong> <span style="font-size:11px;color:var(--text-muted);">(${msg.status})</span>\n${escapeHtml(msg.content)}`;
+        div.innerHTML = `<strong>${escapeHtml(msg.sender)}</strong> <span style="font-size:11px;color:var(--text-muted);">(${escapeHtml(msg.status)})</span><div style="margin-top:4px;">${formatMarkdownWithMath(msg.content)}</div>`;
         renderMathInBox(div);
         chatBox.appendChild(div);
       });

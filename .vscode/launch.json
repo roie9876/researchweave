@@ -1,0 +1,16 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "Run ResearchWeave Server (Port 8080)",
+      "type": "python",
+      "request": "launch",
+      "module": "researchweave.server",
+      "cwd": "${workspaceFolder}",
+      "env": {
+        "PYTHONPATH": "${workspaceFolder}/src",
+        "PORT": "8080"
+      }
+    }
+  ]
+}

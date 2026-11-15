@@ -1,0 +1,1021 @@
+<!DOCTYPE html>
+<html lang="en" dir="ltr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>ResearchWeave — Autonomous Scientific & Engineering Research Platform</title>
+  <style>
+    :root {
+      --bg: #0b0f19;
+      --surface: #111827;
+      --surface-elevated: #1e293b;
+      --border: #334155;
+      --text: #f8fafc;
+      --text-muted: #94a3b8;
+      --accent: #38bdf8;
+      --accent-strong: #0284c7;
+      --success: #22c55e;
+      --warning: #f59e0b;
+      --danger: #ef4444;
+      --purple: #a855f7;
+      --radius: 12px;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Inter, "Noto Sans Hebrew", sans-serif;
+      background: radial-gradient(circle at top right, #1e293b 0%, var(--bg) 55%);
+      color: var(--text);
+      min-height: 100vh;
+      line-height: 1.55;
+    }
+
+    header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 16px 28px;
+      background: rgba(17, 24, 39, 0.88);
+      backdrop-filter: blur(12px);
+      border-bottom: 1px solid var(--border);
+      position: sticky;
+      top: 0;
+      z-index: 50;
+      flex-wrap: wrap;
+      gap: 12px;
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .brand-badge {
+      width: 38px;
+      height: 38px;
+      border-radius: 10px;
+      background: linear-gradient(135deg, var(--accent), var(--purple));
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 800;
+      font-size: 18px;
+      color: #0b0f19;
+    }
+
+    .brand h1 {
+      font-size: 20px;
+      font-weight: 700;
+      letter-spacing: -0.02em;
+    }
+
+    .brand span {
+      font-size: 12px;
+      color: var(--text-muted);
+      display: block;
+    }
+
+    .top-controls {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+
+    button, select, input, textarea {
+      font-family: inherit;
+      font-size: 14px;
+      color: var(--text);
+      background: var(--surface-elevated);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 8px 12px;
+    }
+
+    button {
+      cursor: pointer;
+      font-weight: 600;
+      transition: all 0.15s ease;
+    }
+
+    button:hover {
+      border-color: var(--accent);
+      transform: translateY(-1px);
+    }
+
+    button.primary {
+      background: linear-gradient(135deg, var(--accent-strong), #2563eb);
+      border-color: transparent;
+      color: #fff;
+    }
+
+    button.success {
+      background: #15803d;
+      border-color: transparent;
+      color: #fff;
+    }
+
+    button.warning {
+      background: #b45309;
+      border-color: transparent;
+      color: #fff;
+    }
+
+    .layout {
+      display: grid;
+      grid-template-columns: 320px 1fr;
+      gap: 20px;
+      max-width: 1520px;
+      margin: 22px auto;
+      padding: 0 22px;
+    }
+
+    @media (max-width: 980px) {
+      .layout {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    .panel {
+      background: rgba(17, 24, 39, 0.92);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 18px;
+      box-shadow: 0 10px 28px rgba(0, 0, 0, 0.32);
+    }
+
+    .panel h2 {
+      font-size: 16px;
+      margin-bottom: 12px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+    }
+
+    .inv-list {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      margin-top: 12px;
+      max-height: 440px;
+      overflow-y: auto;
+    }
+
+    .inv-card {
+      padding: 12px;
+      border-radius: 8px;
+      background: var(--surface-elevated);
+      border: 1px solid transparent;
+      cursor: pointer;
+    }
+
+    .inv-card.active {
+      border-color: var(--accent);
+      background: rgba(56, 189, 248, 0.12);
+    }
+
+    .inv-card h3 {
+      font-size: 14px;
+      margin-bottom: 4px;
+    }
+
+    .badge {
+      display: inline-block;
+      padding: 2px 8px;
+      border-radius: 999px;
+      font-size: 11px;
+      font-weight: 700;
+      text-transform: uppercase;
+    }
+
+    .badge.running { background: rgba(56, 189, 248, 0.2); color: var(--accent); }
+    .badge.completed { background: rgba(34, 197, 94, 0.2); color: var(--success); }
+    .badge.paused, .badge.awaiting_confirmation { background: rgba(245, 158, 11, 0.2); color: var(--warning); }
+
+    .metrics-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+      gap: 12px;
+      margin-bottom: 18px;
+    }
+
+    .metric-box {
+      background: var(--surface-elevated);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 12px 14px;
+    }
+
+    .metric-box .label {
+      font-size: 12px;
+      color: var(--text-muted);
+    }
+
+    .metric-box .value {
+      font-size: 22px;
+      font-weight: 700;
+      margin-top: 2px;
+      color: var(--accent);
+    }
+
+    .progressive-bar {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      margin: 14px 0;
+      padding-bottom: 12px;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .drawer {
+      display: none;
+      margin-top: 14px;
+      padding: 16px;
+      background: rgba(30, 41, 59, 0.55);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+    }
+
+    .drawer.open {
+      display: block;
+    }
+
+    .chat-box {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      max-height: 290px;
+      overflow-y: auto;
+      padding: 12px;
+      background: var(--bg);
+      border-radius: 8px;
+      border: 1px solid var(--border);
+      margin-bottom: 10px;
+    }
+
+    .msg {
+      padding: 10px 12px;
+      border-radius: 8px;
+      background: var(--surface-elevated);
+      font-size: 13.5px;
+      white-space: pre-wrap;
+    }
+
+    .msg.lead_agent {
+      border-inline-start: 3px solid var(--accent);
+    }
+
+    .msg.researcher {
+      border-inline-start: 3px solid var(--purple);
+      background: rgba(168, 85, 247, 0.12);
+    }
+
+    .form-row {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      margin-bottom: 12px;
+    }
+
+    .form-row label {
+      font-size: 12.5px;
+      color: var(--text-muted);
+      font-weight: 600;
+    }
+
+    .inline-row {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      align-items: center;
+    }
+
+    .report-preview {
+      background: #090d16;
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 18px;
+      white-space: pre-wrap;
+      font-size: 13.5px;
+      max-height: 520px;
+      overflow-y: auto;
+      line-height: 1.65;
+    }
+
+    .card-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+      gap: 12px;
+    }
+
+    .mini-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 12px;
+      font-size: 13px;
+    }
+
+    .preset-pills {
+      display: flex;
+      gap: 6px;
+      flex-wrap: wrap;
+      margin-bottom: 10px;
+    }
+
+    .preset-pills button {
+      font-size: 12px;
+      padding: 5px 10px;
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="brand">
+      <div class="brand-badge">RW</div>
+      <div>
+        <h1 id="ui-title">ResearchWeave</h1>
+        <span id="ui-subtitle">Autonomous Scientific & Engineering Research Platform on Azure</span>
+      </div>
+    </div>
+    <div class="top-controls">
+      <label for="user-email" style="font-size:12px;color:var(--text-muted);" id="lbl-signin">Signed-in Microsoft Account:</label>
+      <input id="user-email" type="email" value="researcher@researchweave.local" style="width:230px;" />
+      <button onclick="switchLanguage('en')">English (LTR)</button>
+      <button onclick="switchLanguage('he')">עברית (RTL)</button>
+    </div>
+  </header>
+
+  <main class="layout">
+    <!-- Left Sidebar: New Investigation & Shared Investigations -->
+    <aside style="display:flex;flex-direction:column;gap:18px;">
+      <section class="panel">
+        <h2 id="lbl-new-inv">New Research Investigation</h2>
+        <div class="preset-pills">
+          <button onclick="fillPreset('fermat')" id="btn-preset-fermat">Fermat / Modular Math</button>
+          <button onclick="fillPreset('genetics')" id="btn-preset-genetics">Genetic Hair Loss</button>
+          <button onclick="fillPreset('parkinson')" id="btn-preset-parkinson">Parkinson's GBA1/α-Syn</button>
+        </div>
+        <div class="form-row">
+          <label id="lbl-inv-title">Investigation Title</label>
+          <input id="new-title" type="text" placeholder="e.g., Modular Proof & Generalizations of Fermat's Last Theorem" />
+        </div>
+        <div class="form-row">
+          <label id="lbl-inv-obj">Open-Ended Research Problem</label>
+          <textarea id="new-objective" rows="4" placeholder="Describe the scientific, mathematical, or engineering problem..."></textarea>
+        </div>
+        <div class="form-row">
+          <label id="lbl-inv-links">Reference Public Links (optional, comma-separated)</label>
+          <input id="new-links" type="text" placeholder="https://arxiv.org/abs/..., https://doi.org/..." />
+        </div>
+
+        <details style="margin-bottom:12px;font-size:13px;">
+          <summary style="cursor:pointer;color:var(--accent);font-weight:600;" id="lbl-adv-config">Advanced Autonomy, Model Pool & Stopping Limits</summary>
+          <div style="margin-top:10px;display:flex;flex-direction:column;gap:8px;">
+            <label id="lbl-autonomy">Autonomy Mode</label>
+            <select id="new-autonomy">
+              <option value="autonomous">Full Autonomy (Unattended after confirmation)</option>
+              <option value="approval_required">Require Human Approval Before Major Actions</option>
+            </select>
+            <label id="lbl-models">Allowed Azure Foundry Model Pool (comma-separated)</label>
+            <input id="new-models" type="text" value="gpt-5.4-pro, gpt-4.1, o3-deep-research" />
+            <label id="lbl-max-hours">Max Runtime Hours (blank = no limit by default)</label>
+            <input id="new-max-hours" type="number" step="0.5" placeholder="Optional (e.g., 48 or 240)" />
+            <label id="lbl-max-budget">Max Budget USD (blank = no limit by default)</label>
+            <input id="new-max-budget" type="number" step="0.1" placeholder="Optional (e.g., 25.00)" />
+            <label id="lbl-reuse">Reuse Knowledge From Earlier Investigations (IDs)</label>
+            <input id="new-reuse-ids" type="text" placeholder="Optional inv-... IDs" />
+          </div>
+        </details>
+
+        <button class="primary" style="width:100%;padding:10px;" onclick="createInvestigation()" id="btn-start-clarify">
+          1. Clarify & Prepare Investigation
+        </button>
+      </section>
+
+      <section class="panel">
+        <h2>
+          <span id="lbl-shared-runs">Shared Installation Runs</span>
+          <button onclick="loadInvestigations()" style="font-size:12px;padding:4px 8px;">↻</button>
+        </h2>
+        <div id="inv-list" class="inv-list"></div>
+      </section>
+    </aside>
+
+    <!-- Main Workspace: Clean Progressive-Disclosure Research View -->
+    <section class="panel" id="workspace-panel">
+      <div id="empty-state" style="padding:40px;text-align:center;color:var(--text-muted);">
+        <h2 style="justify-content:center;font-size:20px;color:var(--text);margin-bottom:8px;" id="lbl-welcome-title">
+          Welcome to ResearchWeave
+        </h2>
+        <p id="lbl-welcome-desc">
+          Select a sample problem on the left (Fermat's Last Theorem, Genetic Hair Loss, or Parkinson's Disease) or enter your own research objective to launch a dynamic multi-agent investigation with a persistent Company Brain.
+        </p>
+      </div>
+
+      <div id="active-workspace" style="display:none;">
+        <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;flex-wrap:wrap;margin-bottom:14px;">
+          <div>
+            <div class="inline-row" style="margin-bottom:4px;">
+              <span id="active-status-badge" class="badge running">running</span>
+              <span style="font-size:12px;color:var(--text-muted);" id="active-meta"></span>
+            </div>
+            <h2 id="active-title" style="font-size:22px;margin-bottom:4px;"></h2>
+            <p id="active-objective" style="font-size:14px;color:var(--text-muted);"></p>
+          </div>
+          <div class="inline-row">
+            <button class="success" id="btn-confirm-run" onclick="confirmAndLaunch()">✓ Confirm & Launch Autonomous Run</button>
+            <button onclick="stepInvestigation()" id="btn-step">▶ Run Next Research Step</button>
+            <button class="warning" onclick="pauseInvestigation()" id="btn-pause">⏸ Pause</button>
+            <button onclick="resumeInvestigation()" id="btn-resume">↻ Resume</button>
+          </div>
+        </div>
+
+        <!-- Clean Essential Metrics -->
+        <div class="metrics-grid">
+          <div class="metric-box">
+            <div class="label" id="m-lbl-verified">Verified Claims</div>
+            <div class="value" id="m-val-verified">0</div>
+          </div>
+          <div class="metric-box">
+            <div class="label" id="m-lbl-hypotheses">Open Hypotheses</div>
+            <div class="value" id="m-val-hypotheses">0</div>
+          </div>
+          <div class="metric-box">
+            <div class="label" id="m-lbl-agents">Dynamic Specialists</div>
+            <div class="value" id="m-val-agents">0</div>
+          </div>
+          <div class="metric-box">
+            <div class="label" id="m-lbl-brain">Brain Entities & Links</div>
+            <div class="value" id="m-val-brain">0 / 0</div>
+          </div>
+          <div class="metric-box">
+            <div class="label" id="m-lbl-spend">Est. Spend & Runtime</div>
+            <div class="value" id="m-val-spend" style="font-size:17px;">$0.0000</div>
+          </div>
+        </div>
+
+        <!-- Live Conversation & Steering With Lead Research Agent -->
+        <div style="margin-bottom:16px;">
+          <h2 id="lbl-live-chat">Live Conversation & Mid-Run Steering with Lead Research Agent</h2>
+          <div id="chat-messages" class="chat-box"></div>
+          <div class="inline-row">
+            <input id="steer-input" type="text" style="flex:1;min-width:240px;" placeholder="Ask a status question, add evidence, or redirect the investigation without stopping workers..." />
+            <input id="steer-new-obj" type="text" style="width:260px;" placeholder="Optional: New main objective (same run)" />
+            <button class="primary" onclick="sendSteering()" id="btn-send-steer">Send to Lead Agent</button>
+          </div>
+        </div>
+
+        <!-- Progressive Disclosure Buttons (Avoid Cognitive Overload) -->
+        <div class="progressive-bar">
+          <button onclick="toggleDrawer('drawer-report')" class="primary" id="tab-report">📄 Live Draft & Export (PDF / Word / MD)</button>
+          <button onclick="toggleDrawer('drawer-agents')" id="tab-agents">🤖 Dynamic Agents & Sandbox Tasks</button>
+          <button onclick="toggleDrawer('drawer-brain')" id="tab-brain">🧠 Company Brain Graph & Provenance</button>
+          <button onclick="toggleDrawer('drawer-upload')" id="tab-upload">☁️ Per-Run Blob Upload & Live Settings</button>
+          <button onclick="toggleDrawer('drawer-timeline')" id="tab-timeline">⏱️ Timeline & Objective History</button>
+        </div>
+
+        <!-- Drawer 1: Live Evolving Report & Downloads -->
+        <div id="drawer-report" class="drawer open">
+          <div class="inline-row" style="justify-content:space-between;margin-bottom:10px;">
+            <strong id="lbl-report-header">Evolving Research Report (Separates Verified Claims from Hypotheses)</strong>
+            <div class="inline-row">
+              <button onclick="downloadReport('pdf')">⬇ Download PDF</button>
+              <button onclick="downloadReport('docx')">⬇ Download Word (.docx)</button>
+              <button onclick="downloadReport('md')">⬇ Download Markdown</button>
+            </div>
+          </div>
+          <div id="report-content" class="report-preview"></div>
+        </div>
+
+        <!-- Drawer 2: Dynamic Agents & Tasks -->
+        <div id="drawer-agents" class="drawer">
+          <h3 style="margin-bottom:10px;">Dynamically Spawned Specialist Team</h3>
+          <div id="agents-grid" class="card-grid" style="margin-bottom:16px;"></div>
+          <h3 style="margin-bottom:10px;">Research Tasks & Isolated Sandbox Execution</h3>
+          <div id="tasks-grid" class="card-grid"></div>
+        </div>
+
+        <!-- Drawer 3: Company Brain Knowledge Graph & Sources -->
+        <div id="drawer-brain" class="drawer">
+          <div class="inline-row" style="margin-bottom:12px;">
+            <input id="brain-query" type="text" style="flex:1;" placeholder="Search Company Brain entities, multi-hop paths, claims, and citations..." />
+            <button onclick="searchBrain()">Search Brain</button>
+          </div>
+          <h3 style="margin-bottom:8px;">Connected Graph Paths & Claims</h3>
+          <div id="brain-claims" class="card-grid" style="margin-bottom:14px;"></div>
+          <h3 style="margin-bottom:8px;">Sources & Provenance (with Source Deletion Propagation)</h3>
+          <div id="brain-sources" class="card-grid"></div>
+        </div>
+
+        <!-- Drawer 4: Per-Run Blob Container Uploads & Live Model Pool / Stopping Settings -->
+        <div id="drawer-upload" class="drawer">
+          <div class="card-grid">
+            <div class="mini-card">
+              <h3 style="margin-bottom:8px;">Upload File to Run Blob Container</h3>
+              <div class="form-row">
+                <label>Filename (CSV, TXT, Markdown, JSON)</label>
+                <input id="upload-filename" type="text" value="experimental_measurements.csv" />
+              </div>
+              <div class="form-row">
+                <label>File Content</label>
+                <textarea id="upload-content" rows="4">Compound,GCase_Activation,Oligomer_Ratio
+Control,1.00,1.00
+Ambroxol_Analog,1.68,0.44</textarea>
+              </div>
+              <button class="primary" onclick="uploadFileToRun()">Upload & Index into Company Brain</button>
+            </div>
+
+            <div class="mini-card">
+              <h3 style="margin-bottom:8px;">Edit Live Model Pool & Stopping Conditions</h3>
+              <div class="form-row">
+                <label>Allowed Model Pool (Editable During Run)</label>
+                <input id="live-models" type="text" />
+              </div>
+              <div class="form-row">
+                <label>Max Runtime Hours (Optional)</label>
+                <input id="live-max-hours" type="number" step="0.5" placeholder="No limit" />
+              </div>
+              <div class="form-row">
+                <label>Max Spending Budget USD (Optional)</label>
+                <input id="live-max-budget" type="number" step="0.1" placeholder="No limit" />
+              </div>
+              <button onclick="saveLiveSettings()">Update Live Settings</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Drawer 5: Timeline & Objective Revisions -->
+        <div id="drawer-timeline" class="drawer">
+          <h3 style="margin-bottom:8px;">Objective Revision History</h3>
+          <div id="objective-revisions" class="card-grid" style="margin-bottom:14px;"></div>
+          <h3 style="margin-bottom:8px;">Durable Investigation Event Log</h3>
+          <div id="timeline-events" class="card-grid"></div>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <script>
+    let currentLang = "en";
+    let currentInvId = null;
+
+    const I18N = {
+      en: {
+        dir: "ltr",
+        subtitle: "Autonomous Scientific & Engineering Research Platform on Azure",
+        newInv: "New Research Investigation",
+        invTitle: "Investigation Title",
+        invObj: "Open-Ended Research Problem",
+        invLinks: "Reference Public Links (optional, comma-separated)",
+        advConfig: "Advanced Autonomy, Model Pool & Stopping Limits",
+        startClarify: "1. Clarify & Prepare Investigation",
+        sharedRuns: "Shared Installation Runs",
+        welcomeTitle: "Welcome to ResearchWeave",
+        welcomeDesc: "Select a sample problem on the left (Fermat's Last Theorem, Genetic Hair Loss, or Parkinson's Disease) or enter your own research objective to launch a dynamic multi-agent investigation with a persistent Company Brain.",
+        liveChat: "Live Conversation & Mid-Run Steering with Lead Research Agent",
+        sendSteer: "Send to Lead Agent",
+      },
+      he: {
+        dir: "rtl",
+        subtitle: "מערכת מחקר אוטונומית למהנדסים וחוקרים על גבי Microsoft Azure",
+        newInv: "פתיחת מחקר עומק חדש",
+        invTitle: "כותרת המחקר",
+        invObj: "הגדרת בעיית המחקר (טקסט חופשי)",
+        invLinks: "קישורים למקורות מידע ציבוריים (אופציונלי)",
+        advConfig: "הגדרות מתקדמות: אוטונומיה, מאגר מודלים ותנאי עצירה",
+        startClarify: "1. שאל שאלות הבהרה והכן מחקר",
+        sharedRuns: "מחקרים משותפים במערכת",
+        welcomeTitle: "ברוכים הבאים ל-ResearchWeave",
+        welcomeDesc: "בחר דוגמת מחקר מוכנה (המשפט האחרון של פרמה, נשירה גנטית, או מחלת פרקינסון) או הזן שאלת מחקר פתוחה כדי להפעיל צוות סוכנים דינמי ומוח ארגוני מקושר.",
+        liveChat: "שיחה חיה והכוונת המחקר בזמן אמת מול הסוכן הראשי",
+        sendSteer: "שלח לסוכן הראשי",
+      }
+    };
+
+    function switchLanguage(lang) {
+      currentLang = lang;
+      const t = I18N[lang] || I18N.en;
+      document.documentElement.lang = lang;
+      document.documentElement.dir = t.dir;
+      document.getElementById("ui-subtitle").textContent = t.subtitle;
+      document.getElementById("lbl-new-inv").textContent = t.newInv;
+      document.getElementById("lbl-inv-title").textContent = t.invTitle;
+      document.getElementById("lbl-inv-obj").textContent = t.invObj;
+      document.getElementById("lbl-inv-links").textContent = t.invLinks;
+      document.getElementById("lbl-adv-config").textContent = t.advConfig;
+      document.getElementById("btn-start-clarify").textContent = t.startClarify;
+      document.getElementById("lbl-shared-runs").textContent = t.sharedRuns;
+      document.getElementById("lbl-welcome-title").textContent = t.welcomeTitle;
+      document.getElementById("lbl-welcome-desc").textContent = t.welcomeDesc;
+      document.getElementById("lbl-live-chat").textContent = t.liveChat;
+      document.getElementById("btn-send-steer").textContent = t.sendSteer;
+    }
+
+    function fillPreset(kind) {
+      if (kind === "fermat") {
+        document.getElementById("new-title").value = "Fermat's Last Theorem & Modular Curve Generalizations";
+        document.getElementById("new-objective").value =
+          "Investigate the Frey-Hellegouarch elliptic curve reduction, Ribet's level-lowering theorem, and Wiles's modularity theorem for Fermat's Last Theorem, verify finite prime exponent bounds in the isolated sandbox, and evaluate obstructions to generalized Fermat-Catalan equations.";
+        document.getElementById("new-links").value = "https://doi.org/10.2307/2118559";
+      } else if (kind === "genetics") {
+        document.getElementById("new-title").value = "Genetic Androgenetic Alopecia: AR/DHT & Wnt/β-Catenin Pathways";
+        document.getElementById("new-objective").value =
+          "Analyze polygenic risk loci (Xq12 AR/EDA2R, HDAC9) and dermal papilla paracrine inhibitors (DKK-1, TGF-β1) in genetic hair loss, run quantitative pathway simulations in the sandbox, and propose testable multi-target hypotheses.";
+        document.getElementById("new-links").value = "https://doi.org/10.1038/ncomms14694";
+      } else if (kind === "parkinson") {
+        document.getElementById("new-title").value = "Parkinson's Disease: GBA1 Lysosomal Flux & α-Synuclein Oligomers";
+        document.getElementById("new-objective").value =
+          "Investigate the bidirectional pathogenic loop between GBA1 glucocerebrosidase deficiency, LRRK2 kinase activity, and α-synuclein oligomerization in Parkinson's disease, simulate clearance kinetics, and distinguish verified observations from preclinical hypotheses.";
+        document.getElementById("new-links").value = "https://doi.org/10.1016/j.cell.2011.06.001";
+      }
+    }
+
+    function toggleDrawer(id) {
+      document.querySelectorAll(".drawer").forEach(el => {
+        if (el.id === id) {
+          el.classList.toggle("open");
+        } else {
+          el.classList.remove("open");
+        }
+      });
+    }
+
+    async function createInvestigation() {
+      const title = document.getElementById("new-title").value.trim();
+      const objective = document.getElementById("new-objective").value.trim();
+      if (!title || !objective) {
+        alert("Please enter both a title and a research problem.");
+        return;
+      }
+      const owner = document.getElementById("user-email").value.trim() || "researcher@researchweave.local";
+      const linksRaw = document.getElementById("new-links").value.trim();
+      const modelsRaw = document.getElementById("new-models").value.trim();
+      const reuseRaw = document.getElementById("new-reuse-ids").value.trim();
+      const maxHours = document.getElementById("new-max-hours").value;
+      const maxBudget = document.getElementById("new-max-budget").value;
+
+      const payload = {
+        title,
+        objective,
+        owner,
+        language: currentLang,
+        report_language: currentLang,
+        autonomy_mode: document.getElementById("new-autonomy").value,
+        model_pool: modelsRaw ? modelsRaw.split(",").map(s => s.trim()).filter(Boolean) : ["gpt-5.4-pro"],
+        reference_links: linksRaw ? linksRaw.split(",").map(s => s.trim()).filter(Boolean) : [],
+        reused_investigation_ids: reuseRaw ? reuseRaw.split(",").map(s => s.trim()).filter(Boolean) : [],
+        stopping_conditions: {
+          max_runtime_hours: maxHours ? parseFloat(maxHours) : null,
+          max_budget_usd: maxBudget ? parseFloat(maxBudget) : null,
+          stop_on_sufficient_evidence: true,
+          max_consecutive_failures: 5
+        }
+      };
+
+      const res = await fetch("/api/investigations", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload)
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        alert(data.error || "Failed to create investigation.");
+        return;
+      }
+      currentInvId = data.investigation.id;
+      await loadInvestigations();
+      renderBundle(data);
+    }
+
+    async function loadInvestigations() {
+      const res = await fetch("/api/investigations");
+      const data = await res.json();
+      const list = document.getElementById("inv-list");
+      list.innerHTML = "";
+      (data.investigations || []).forEach(inv => {
+        const div = document.createElement("div");
+        div.className = "inv-card" + (inv.id === currentInvId ? " active" : "");
+        div.onclick = () => selectInvestigation(inv.id);
+        div.innerHTML = `
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;">
+            <span class="badge ${inv.status}">${inv.status}</span>
+            <span style="font-size:11px;color:var(--text-muted);">${inv.id}</span>
+          </div>
+          <h3>${escapeHtml(inv.title)}</h3>
+          <div style="font-size:11.5px;color:var(--text-muted);">Blob: ${escapeHtml(inv.blob_container)}</div>
+        `;
+        list.appendChild(div);
+      });
+    }
+
+    async function selectInvestigation(invId) {
+      currentInvId = invId;
+      const res = await fetch(`/api/investigations/${invId}`);
+      if (res.ok) {
+        const bundle = await res.json();
+        renderBundle(bundle);
+        loadInvestigations();
+      }
+    }
+
+    async function confirmAndLaunch() {
+      if (!currentInvId) return;
+      const answer = document.getElementById("steer-input").value.trim();
+      const res = await fetch(`/api/investigations/${currentInvId}/confirm`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ clarification_answers: answer, run_initial_cycle: true })
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        alert(data.error || "Could not launch investigation.");
+        return;
+      }
+      document.getElementById("steer-input").value = "";
+      renderBundle(data);
+      loadInvestigations();
+    }
+
+    async function stepInvestigation() {
+      if (!currentInvId) return;
+      const res = await fetch(`/api/investigations/${currentInvId}/step`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ max_tasks: 1 })
+      });
+      const data = await res.json();
+      if (res.ok) {
+        renderBundle(data);
+        loadInvestigations();
+      }
+    }
+
+    async function sendSteering() {
+      if (!currentInvId) return;
+      const msg = document.getElementById("steer-input").value.trim();
+      const newObj = document.getElementById("steer-new-obj").value.trim();
+      if (!msg && !newObj) return;
+
+      const sender = document.getElementById("user-email").value.trim() || "researcher@researchweave.local";
+      const res = await fetch(`/api/investigations/${currentInvId}/steer`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          sender,
+          message: msg || `Update main objective to: ${newObj}`,
+          update_objective: newObj || null
+        })
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        alert(data.error || "Steering request failed.");
+        return;
+      }
+      document.getElementById("steer-input").value = "";
+      document.getElementById("steer-new-obj").value = "";
+      renderBundle(data);
+      loadInvestigations();
+    }
+
+    async function uploadFileToRun() {
+      if (!currentInvId) return;
+      const filename = document.getElementById("upload-filename").value.trim();
+      const content_text = document.getElementById("upload-content").value;
+      const uploaded_by = document.getElementById("user-email").value.trim() || "researcher@researchweave.local";
+      const res = await fetch(`/api/investigations/${currentInvId}/upload`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ filename, content_text, uploaded_by })
+      });
+      if (res.ok) {
+        await selectInvestigation(currentInvId);
+      } else {
+        const err = await res.json();
+        alert(err.error || "Upload failed");
+      }
+    }
+
+    async function saveLiveSettings() {
+      if (!currentInvId) return;
+      const modelsRaw = document.getElementById("live-models").value.trim();
+      const maxH = document.getElementById("live-max-hours").value;
+      const maxB = document.getElementById("live-max-budget").value;
+      const res = await fetch(`/api/investigations/${currentInvId}/settings`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          model_pool: modelsRaw ? modelsRaw.split(",").map(s => s.trim()).filter(Boolean) : null,
+          stopping_conditions: {
+            max_runtime_hours: maxH ? parseFloat(maxH) : null,
+            max_budget_usd: maxB ? parseFloat(maxB) : null,
+            stop_on_sufficient_evidence: true,
+            max_consecutive_failures: 5
+          }
+        })
+      });
+      if (res.ok) {
+        renderBundle(await res.json());
+      }
+    }
+
+    async function pauseInvestigation() {
+      if (!currentInvId) return;
+      const res = await fetch(`/api/investigations/${currentInvId}/pause`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ reason: "Paused by researcher via workspace UI." })
+      });
+      if (res.ok) {
+        renderBundle(await res.json());
+        loadInvestigations();
+      }
+    }
+
+    async function resumeInvestigation() {
+      if (!currentInvId) return;
+      const res = await fetch(`/api/investigations/${currentInvId}/resume`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({})
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        alert(data.error || "Resume conflict");
+        return;
+      }
+      renderBundle(data);
+      loadInvestigations();
+    }
+
+    async function deleteSource(sourceId) {
+      if (!currentInvId) return;
+      await fetch(`/api/investigations/${currentInvId}/sources/${sourceId}`, { method: "DELETE" });
+      await selectInvestigation(currentInvId);
+    }
+
+    async function searchBrain() {
+      if (!currentInvId) return;
+      const q = document.getElementById("brain-query").value.trim();
+      const res = await fetch(`/api/investigations/${currentInvId}/brain?q=${encodeURIComponent(q)}`);
+      if (res.ok) {
+        const brain = await res.json();
+        renderBrainSection(brain);
+      }
+    }
+
+    function downloadReport(fmt) {
+      if (!currentInvId) return;
+      window.open(`/api/investigations/${currentInvId}/export?format=${fmt}`, "_blank");
+    }
+
+    function renderBundle(bundle) {
+      document.getElementById("empty-state").style.display = "none";
+      document.getElementById("active-workspace").style.display = "block";
+
+      const inv = bundle.investigation;
+      const m = bundle.metrics;
+      const badge = document.getElementById("active-status-badge");
+      badge.className = `badge ${inv.status}`;
+      badge.textContent = inv.status;
+
+      document.getElementById("active-meta").textContent =
+        `ID: ${inv.id} | Owner: ${inv.owner} | Blob Container: ${inv.blob_container} | Models: ${inv.model_pool.join(", ")}`;
+      document.getElementById("active-title").textContent = inv.title;
+      document.getElementById("active-objective").textContent =
+        inv.objective + (inv.pause_reason ? ` [Paused: ${inv.pause_reason}]` : "");
+
+      document.getElementById("btn-confirm-run").style.display =
+        inv.status === "awaiting_confirmation" ? "inline-block" : "none";
+
+      document.getElementById("m-val-verified").textContent = m.verified_claims_count;
+      document.getElementById("m-val-hypotheses").textContent = m.hypotheses_count;
+      document.getElementById("m-val-agents").textContent = m.active_agents;
+      document.getElementById("m-val-brain").textContent = `${m.entities_count} / ${m.relations_count}`;
+      document.getElementById("m-val-spend").textContent =
+        `$${inv.estimated_spend_usd.toFixed(4)} (${inv.runtime_seconds.toFixed(1)}s)`;
+
+      document.getElementById("live-models").value = inv.model_pool.join(", ");
+      document.getElementById("live-max-hours").value = inv.stopping_conditions.max_runtime_hours || "";
+      document.getElementById("live-max-budget").value = inv.stopping_conditions.max_budget_usd || "";
+
+      // Messages
+      const chatBox = document.getElementById("chat-messages");
+      chatBox.innerHTML = "";
+      (bundle.messages || []).forEach(msg => {
+        const div = document.createElement("div");
+        div.className = `msg ${msg.role}`;
+        div.innerHTML = `<strong>${escapeHtml(msg.sender)}</strong> <span style="font-size:11px;color:var(--text-muted);">(${msg.status})</span>\n${escapeHtml(msg.content)}`;
+        chatBox.appendChild(div);
+      });
+      chatBox.scrollTop = chatBox.scrollHeight;
+
+      // Report
+      document.getElementById("report-content").textContent = inv.draft_report_markdown || "";
+
+      // Agents & Tasks
+      const agGrid = document.getElementById("agents-grid");
+      agGrid.innerHTML = "";
+      (bundle.agents || []).forEach(ag => {
+        const d = document.createElement("div");
+        d.className = "mini-card";
+        d.innerHTML = `
+          <strong>${escapeHtml(ag.name)}</strong>
+          <div style="font-size:12px;color:var(--accent);">${escapeHtml(ag.role_title)} — Model: ${escapeHtml(ag.assigned_model)}</div>
+          <p style="margin-top:6px;color:var(--text-muted);">${escapeHtml(ag.description)}</p>
+        `;
+        agGrid.appendChild(d);
+      });
+
+      const tkGrid = document.getElementById("tasks-grid");
+      tkGrid.innerHTML = "";
+      (bundle.tasks || []).forEach(t => {
+        const d = document.createElement("div");
+        d.className = "mini-card";
+        d.innerHTML = `
+          <div style="display:flex;justify-content:space-between;">
+            <strong>${escapeHtml(t.title)}</strong>
+            <span class="badge ${t.status}">${t.status}</span>
+          </div>
+          <div style="font-size:12px;color:var(--text-muted);margin:4px 0;">Agent: ${escapeHtml(t.assigned_agent_name || "")} (${escapeHtml(t.assigned_model || "")})</div>
+          <p>${escapeHtml(t.result_summary || t.description)}</p>
+          ${t.code_output ? `<pre style="margin-top:6px;padding:6px;background:#000;border-radius:6px;font-size:11.5px;overflow-x:auto;">${escapeHtml(t.code_output)}</pre>` : ""}
+        `;
+        tkGrid.appendChild(d);
+      });
+
+      renderBrainSection(bundle.brain);
+
+      // Revisions & Events
+      const revGrid = document.getElementById("objective-revisions");
+      revGrid.innerHTML = "";
+      (inv.objective_history || []).forEach(r => {
+        const d = document.createElement("div");
+        d.className = "mini-card";
+        d.innerHTML = `<strong>Revision #${r.revision}</strong> (${escapeHtml(r.updated_by)})<p>${escapeHtml(r.objective)}</p><small style="color:var(--text-muted);">${escapeHtml(r.reason)}</small>`;
+        revGrid.appendChild(d);
+      });
+
+      const evGrid = document.getElementById("timeline-events");
+      evGrid.innerHTML = "";
+      (bundle.events || []).slice().reverse().forEach(ev => {
+        const d = document.createElement("div");
+        d.className = "mini-card";
+        d.innerHTML = `<strong>#${ev.id} ${escapeHtml(ev.event_type)}</strong> (${escapeHtml(ev.actor)})<p>${escapeHtml(ev.summary)}</p>`;
+        evGrid.appendChild(d);
+      });
+    }
+
+    function renderBrainSection(brain) {
+      const clmGrid = document.getElementById("brain-claims");
+      clmGrid.innerHTML = "";
+      (brain.claims || []).forEach(c => {
+        const d = document.createElement("div");
+        d.className = "mini-card";
+        d.innerHTML = `
+          <span class="badge ${c.verification_state === 'reviewed_verified' ? 'completed' : 'paused'}">${escapeHtml(c.verification_state)}</span>
+          <p style="margin-top:6px;">${escapeHtml(c.statement)}</p>
+          <div style="font-size:11.5px;color:var(--text-muted);margin-top:6px;">
+            Sources: ${(c.supporting_source_ids || []).join(", ") || "none"}
+            ${c.reviewer_notes ? `<br/>Audit: ${escapeHtml(c.reviewer_notes)}` : ""}
+          </div>
+        `;
+        clmGrid.appendChild(d);
+      });
+
+      const srcGrid = document.getElementById("brain-sources");
+      srcGrid.innerHTML = "";
+      (brain.sources || []).forEach(s => {
+        const d = document.createElement("div");
+        d.className = "mini-card";
+        d.innerHTML = `
+          <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:6px;">
+            <strong>[${escapeHtml(s.id)}] ${escapeHtml(s.title)}</strong>
+            <button onclick="deleteSource('${s.id}')" style="font-size:11px;padding:2px 6px;">Delete & Propagate</button>
+          </div>
+          <div style="font-size:11.5px;color:var(--accent);margin:4px 0;">${escapeHtml(s.uri_or_path)}</div>
+          <p style="font-size:12px;color:var(--text-muted);">${escapeHtml(s.excerpt || "")}</p>
+        `;
+        srcGrid.appendChild(d);
+      });
+    }
+
+    function escapeHtml(str) {
+      return String(str || "")
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;");
+    }
+
+    loadInvestigations();
+  </script>
+</body>
+</html>

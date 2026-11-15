@@ -17,6 +17,7 @@ dependencies = [
   "azure-identity>=1.17.0",
   "azure-storage-blob>=12.20.0",
   "openai>=1.50.0",
+  "agentscope>=2.0.0",
 ]
 
 [project.scripts]

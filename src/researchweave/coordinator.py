@@ -20,8 +20,10 @@ import re
 from pathlib import Path
 from typing import Any
 
+from .agentscope_runtime import AGENTSCOPE_AVAILABLE, AGENTSCOPE_VERSION, AgentScopeTeamRuntime
 from .blob_store import ResearchBlobStore
 from .brain import ResearchWeaveStore
+from .content_understanding import AzureContentUnderstandingService
 from .models import (
     AutonomyMode,
     BrainEntity,
@@ -39,8 +41,18 @@ from .models import (
     new_id,
     utc_now_iso,
 )
+from .openscientist_engine import (
+    OpenScientistKnowledgeState,
+    search_arxiv_live,
+    search_pubmed_live,
+)
 from .reports import build_live_report_markdown
 from .sandbox import check_guardrails, execute_in_isolated_sandbox
+from .trustgraph_brain import (
+    SCIENTIFIC_ONTOLOGY_SPEC,
+    TrustGraphProvenanceBuilder,
+    extract_ontology_entities_with_llm,
+)
 
 
 MODEL_DEPLOYMENT_ALIASES: dict[str, str] = {
@@ -142,6 +154,8 @@ class ResearchCoordinator:
         self.store = store
         self.blob_store = blob_store
         self.foundry = foundry or FoundryModelAdapter()
+        self.agentscope_runtime = AgentScopeTeamRuntime(self.foundry)
+        self.content_understanding = AzureContentUnderstandingService(self.foundry.endpoint)
 
     def detect_domain(self, objective: str) -> str:
         lower = objective.lower()
@@ -459,13 +473,24 @@ class ResearchCoordinator:
                 created_by="Lead-Research-Coordinator",
             )
             self.store.upsert_agent(ag)
+            self.agentscope_runtime.spawn_specialist_agent(
+                agent_id=ag.id,
+                name=ag.name,
+                system_prompt=ag.system_prompt,
+                assigned_model=ag.assigned_model,
+            )
             created_agents[spec["key"]] = ag
             self.store.append_event(
                 inv_id,
                 "specialist_spawned",
                 "Lead-Research-Coordinator",
-                f"Dynamically created specialist '{ag.name}' ({ag.role_title}) assigned to model '{ag.assigned_model}'.",
-                {"agent_id": ag.id, "role": ag.role_title, "model": ag.assigned_model},
+                f"Dynamically created AgentScope 2.0 specialist '{ag.name}' ({ag.role_title}) assigned to model '{ag.assigned_model}'.",
+                {
+                    "agent_id": ag.id,
+                    "role": ag.role_title,
+                    "model": ag.assigned_model,
+                    "runtime": f"agentscope-{AGENTSCOPE_VERSION}",
+                },
             )
 
         t1 = ResearchTask(
@@ -1083,21 +1108,47 @@ class ResearchCoordinator:
             )
             task.result_summary = f"Extracted baseline entities, relations, and source provenance for '{inv['title']}'."
 
-        lit_live, lit_dep = self.foundry.complete(
-            task.assigned_model or "gpt-6-astra",
+        # Live OpenScientist literature search (PubMed / ArXiv) when online with Foundry
+        if self.foundry.is_configured:
+            live_papers = (
+                search_arxiv_live(inv["objective"], max_results=2)
+                if domain in ("mathematics", "engineering")
+                else search_pubmed_live(inv["objective"], max_results=2)
+            )
+            for p in live_papers:
+                self.store.add_source(
+                    SourceRecord(
+                        investigation_id=inv_id,
+                        title=f"[{p.get('source_db', 'lit').upper()} {p.get('pmid')}] {p.get('title')}",
+                        source_type="scientific_paper",
+                        uri_or_path=p.get("uri") or "https://pubmed.ncbi.nlm.nih.gov/",
+                        blob_container=inv["blob_container"],
+                        content_hash=hashlib.sha256(
+                            f"{p.get('pmid')}:{p.get('title')}".encode("utf-8")
+                        ).hexdigest(),
+                        excerpt=p.get("abstract", "")[:500],
+                        metadata={"pmid": p.get("pmid"), "source_db": p.get("source_db")},
+                    )
+                )
+
+        lit_live, lit_dep, used_live = self.agentscope_runtime.run_specialist_turn(
+            agent_id=task.assigned_agent_id or f"lit-{inv_id}",
+            name=task.assigned_agent_name or "Literature-Agent",
             system_prompt=(
-                "You are the Literature & Evidence Specialist in ResearchWeave. "
+                "You are the Literature & Evidence Specialist in ResearchWeave (running on AgentScope 2.0 + OpenScientist). "
                 "Provide a concise (2-3 sentence) synthesis of the key scientific mechanisms and citations "
-                "extracted into the Company Brain for this objective."
+                "extracted into the TrustGraph Company Brain for this objective."
             ),
+            assigned_model=task.assigned_model or "gpt-6-astra",
             user_prompt=(
                 f"Investigation Title: {inv['title']}\n"
                 f"Objective: {inv['objective']}\n"
                 f"Extracted Baseline Summary: {task.result_summary}"
             ),
+            fallback_text="",
         )
-        if lit_live:
-            task.result_summary = f"{task.result_summary} [Foundry {lit_dep}]: {lit_live}"
+        if used_live and lit_live:
+            task.result_summary = f"{task.result_summary} [AgentScope/{lit_dep}]: {lit_live}"
             task.assigned_model = lit_dep
 
         self.store.append_event(
@@ -1236,21 +1287,24 @@ class ResearchCoordinator:
                 f"Synthesized Hypothesis for '{inv['title']}': Multi-hop graph traversal across the Company Brain indicates that coupling boundary-layer stabilization with adaptive feedback control mitigates degradation under peak stress regimes."
             )
 
-        live_text, used_dep = self.foundry.complete(
-            task.assigned_model,
+        live_text, used_dep, used_live = self.agentscope_runtime.run_specialist_turn(
+            agent_id=task.assigned_agent_id or f"hyp-{inv_id}",
+            name=task.assigned_agent_name or "Hypothesis-Architect",
             system_prompt=(
-                "You are a senior scientific hypothesis architect in ResearchWeave. "
+                "You are a senior scientific hypothesis architect in ResearchWeave (running on AgentScope 2.0). "
                 "Provide a concise (2-3 sentence) testable scientific hypothesis with explicit boundary conditions "
                 "and falsifiability criteria. Never claim an unverified hypothesis is a proven clinical cure or formal proof."
             ),
+            assigned_model=task.assigned_model or "gpt-6-astra",
             user_prompt=(
                 f"Investigation Title: {inv['title']}\n"
                 f"Objective: {inv['objective']}\n"
                 f"Baseline synthesis: {statement}"
             ),
+            fallback_text="",
         )
-        if live_text:
-            statement = f"{statement} [Foundry {used_dep} Synthesis]: {live_text}"
+        if used_live and live_text:
+            statement = f"{statement} [AgentScope/{used_dep} Synthesis]: {live_text}"
             task.assigned_model = used_dep
 
         self.store.upsert_claim(
@@ -1282,19 +1336,22 @@ class ResearchCoordinator:
         claims_digest = "\n".join(
             f"- [{c.get('verification_state')}] {c.get('statement')}" for c in claims
         )
-        live_audit, used_dep = self.foundry.complete(
-            task.assigned_model or "gpt-6.1-sol",
+        live_audit, used_dep, used_live = self.agentscope_runtime.run_specialist_turn(
+            agent_id=task.assigned_agent_id or f"rev-{inv_id}",
+            name=task.assigned_agent_name or "Independent-Reviewer",
             system_prompt=(
-                "You are the Independent Epistemic Reviewer in ResearchWeave. "
+                "You are the Independent Epistemic Reviewer in ResearchWeave (running on AgentScope 2.0). "
                 "Provide a concise (2-3 sentence) epistemic audit of the supplied claims, distinguishing "
                 "what was verified by calculation/citation from what remains an unverified hypothesis."
             ),
+            assigned_model=task.assigned_model or "gpt-6.1-sol",
             user_prompt=(
                 f"Investigation: {inv['title']}\nObjective: {inv['objective']}\n"
                 f"Claims to audit:\n{claims_digest}"
             ),
+            fallback_text="",
         )
-        if live_audit:
+        if used_live and live_audit:
             task.assigned_model = used_dep
 
         checked_count = 0
@@ -1528,6 +1585,14 @@ class ResearchCoordinator:
             metadata={"uploaded_by": uploaded_by},
         )
 
+        # Parse document structure, tables, and page/chunk locators via Azure AI Content Understanding
+        cu_result = self.content_understanding.analyze_document(
+            filename=filename,
+            raw_bytes=raw_bytes,
+            content_type=content_type,
+        )
+        cu_dict = cu_result.to_dict()
+
         src = self.store.add_source(
             SourceRecord(
                 investigation_id=investigation_id,
@@ -1537,25 +1602,48 @@ class ResearchCoordinator:
                 blob_container=artifact["container_name"],
                 blob_name=artifact["blob_name"],
                 content_hash=artifact["sha256"],
-                excerpt=content_text[:400],
-                metadata={"size_bytes": artifact["size_bytes"], "uploaded_by": uploaded_by},
+                excerpt=cu_result.markdown_content[:400],
+                metadata={
+                    "size_bytes": artifact["size_bytes"],
+                    "uploaded_by": uploaded_by,
+                    "content_understanding": {
+                        "analyzer_used": cu_result.analyzer_used,
+                        "page_count": cu_result.page_count,
+                        "table_count": cu_result.table_count,
+                        "chunk_count": len(cu_result.chunks),
+                    },
+                },
             )
         )
 
-        # Extract candidate entities & claims from the uploaded file into the Company Brain
+        # Extract candidate entities & claims from the uploaded file into the TrustGraph Company Brain
         extracted_entities = self._extract_entities_from_text(
-            investigation_id, filename, content_text, src.id
+            investigation_id, filename, cu_result.markdown_content or content_text, src.id
+        )
+
+        prov_triples = TrustGraphProvenanceBuilder.build_document_provenance_triples(
+            investigation_id=investigation_id,
+            source_id=src.id,
+            title=src.title,
+            uri_or_path=src.uri_or_path,
+            mime_type=content_type,
+            page_count=cu_result.page_count,
+            chunks=cu_dict["chunks"],
+            extracted_entities=[e.model_dump() for e in extracted_entities],
+            llm_model=self._pick_model_for_role(inv["model_pool"], "literature"),
         )
 
         self.store.append_event(
             investigation_id,
             "file_uploaded_and_indexed",
             uploaded_by,
-            f"Uploaded '{filename}' to container '{artifact['container_name']}' and extracted {len(extracted_entities)} Company Brain entities.",
+            f"Uploaded '{filename}' to container '{artifact['container_name']}', analyzed layout via {cu_result.analyzer_used} ({len(cu_result.chunks)} chunks, {cu_result.table_count} tables), and extracted {len(extracted_entities)} TrustGraph entities ({len(prov_triples)} PROV-O triples).",
             {
                 "source_id": src.id,
                 "blob_container": artifact["container_name"],
                 "blob_name": artifact["blob_name"],
+                "analyzer_used": cu_result.analyzer_used,
+                "prov_o_triple_count": len(prov_triples),
                 "extracted_entities": [e.canonical_name for e in extracted_entities],
             },
         )
@@ -1563,6 +1651,8 @@ class ResearchCoordinator:
         return {
             "source": src.model_dump(),
             "blob": artifact,
+            "content_understanding": cu_dict,
+            "trustgraph_prov_triples": prov_triples,
             "extracted_entities": [e.model_dump() for e in extracted_entities],
         }
 
@@ -1615,6 +1705,30 @@ class ResearchCoordinator:
                 )
             if len(seen) >= 5:
                 break
+
+        # Also invoke TrustGraph LLM Ontology Extractor when Foundry is active
+        inv = self.store.get_investigation(investigation_id) or {}
+        llm_ext = extract_ontology_entities_with_llm(
+            self.foundry,
+            self._pick_model_for_role(inv.get("model_pool") or ["gpt-6-astra"], "literature"),
+            filename,
+            text,
+        )
+        for item in llm_ext.get("entities", []):
+            e_name = (item.get("name") or "").strip()
+            e_type = (item.get("type") or "concept").strip().lower()
+            if e_name and e_name not in seen:
+                seen.add(e_name)
+                ent = self.store.upsert_entity(
+                    BrainEntity(
+                        investigation_id=investigation_id,
+                        canonical_name=e_name,
+                        entity_type=e_type if e_type in SCIENTIFIC_ONTOLOGY_SPEC["classes"] else "concept",
+                        summary=item.get("summary") or f"Extracted via TrustGraph ontology from '{filename}'.",
+                        source_ids=[source_id],
+                    )
+                )
+                entities.append(ent)
 
         self.store.upsert_claim(
             ClaimRecord(
@@ -1769,6 +1883,62 @@ class ResearchCoordinator:
             1 for c in brain_data["claims"] if c["verification_state"] == "hypothesis"
         )
 
+        # Build OpenScientist KnowledgeState view & TrustGraph PROV-O triples for the investigation
+        os_state = OpenScientistKnowledgeState(
+            job_id=investigation_id,
+            research_question=inv["objective"],
+            max_iterations=max(1, len(inv.get("objective_history", []))),
+        )
+        for src in brain_data["sources"]:
+            os_state.add_literature(
+                pmid=src["id"],
+                title=src["title"],
+                abstract=src.get("excerpt", ""),
+                uri=src.get("uri_or_path", ""),
+                source_db=src.get("source_type", "scientific_paper"),
+            )
+        for clm in brain_data["claims"]:
+            if clm["verification_state"] == "hypothesis":
+                os_state.add_hypothesis(clm["statement"], proposed_by="Hypothesis-Architect")
+            else:
+                citations = []
+                for sid in clm.get("supporting_source_ids", []):
+                    src_match = next((s for s in brain_data["sources"] if s["id"] == sid), None)
+                    if src_match:
+                        citations.append(
+                            {
+                                "pmid": sid,
+                                "snippet": (src_match.get("excerpt") or "")[:90],
+                            }
+                        )
+                os_state.add_finding(
+                    title=clm.get("category", "finding").upper(),
+                    evidence=clm["statement"],
+                    citations=citations,
+                )
+        for t in tasks:
+            if t.get("code_executed"):
+                os_state.log_analysis(
+                    action=t["title"],
+                    code=t.get("code_executed"),
+                    output=t.get("code_output"),
+                )
+
+        primary_src = brain_data["sources"][0] if brain_data["sources"] else None
+        prov_triples = (
+            TrustGraphProvenanceBuilder.build_document_provenance_triples(
+                investigation_id=investigation_id,
+                source_id=primary_src["id"],
+                title=primary_src["title"],
+                uri_or_path=primary_src["uri_or_path"],
+                extracted_entities=brain_data["entities"],
+                extracted_relations=brain_data["relations"],
+                llm_model=self._pick_model_for_role(inv["model_pool"], "literature"),
+            )
+            if primary_src
+            else []
+        )
+
         return {
             "investigation": inv,
             "metrics": {
@@ -1780,10 +1950,24 @@ class ResearchCoordinator:
                 "relations_count": len(brain_data["relations"]),
                 "verified_claims_count": verified_claims,
                 "hypotheses_count": hypothesis_claims,
+                "prov_o_triples_count": len(prov_triples),
             },
             "agents": agents,
             "tasks": tasks,
             "messages": messages,
             "events": events,
             "brain": brain_data,
+            "openscientist_knowledge_state": os_state.to_dict(),
+            "trustgraph_provenance": {
+                "ontology_id": SCIENTIFIC_ONTOLOGY_SPEC["id"],
+                "ontology_uri": SCIENTIFIC_ONTOLOGY_SPEC["uri"],
+                "triples": prov_triples[:40],
+            },
+            "runtime_stack": {
+                "discovery_engine": "OpenScientist KnowledgeState + PubMed/ArXiv",
+                "agent_runtime": f"AgentScope {AGENTSCOPE_VERSION} (active={AGENTSCOPE_AVAILABLE})",
+                "company_brain": "TrustGraph OWL Ontology + W3C PROV-O",
+                "document_ingestion": "Microsoft Azure AI Content Understanding",
+                "foundry_models": inv["model_pool"],
+            },
         }

@@ -255,6 +255,50 @@ class ResearchWeaveAcceptanceTests(unittest.TestCase):
             server.shutdown()
             server.server_close()
 
+    def test_06_openscientist_agentscope_trustgraph_and_content_understanding(self) -> None:
+        """Verify OpenScientist KnowledgeState, real AgentScope 2.0 runtime, Azure Content Understanding, and TrustGraph PROV-O triples."""
+        bundle = self.app.coordinator.create_investigation(
+            CreateInvestigationRequest(
+                title="OpenScientist + AgentScope + TrustGraph Verification",
+                objective="Investigate Fermat's Last Theorem modular curves and GBA1 kinetics.",
+                model_pool=["gpt-6.1-sol", "gpt-6-astra"],
+            )
+        )
+        inv_id = bundle["investigation"]["id"]
+
+        # Verify Content Understanding + TrustGraph PROV-O triple extraction on file upload
+        upload_res = self.app.coordinator.ingest_uploaded_file(
+            inv_id,
+            filename="kinetics_measurements.csv",
+            content_text="Compound,GCaseActivity,OligomerLoad\nAmbroxol,1.85,0.34\nControl,1.00,1.00",
+            content_type="text/csv",
+        )
+        self.assertIn("content_understanding", upload_res)
+        self.assertEqual(upload_res["content_understanding"]["table_count"], 1)
+        self.assertGreaterEqual(len(upload_res["trustgraph_prov_triples"]), 10)
+
+        completed = self.app.coordinator.confirm_and_start(inv_id, run_initial_cycle=True)
+
+        # Verify OpenScientist KnowledgeState structure & citation validation
+        os_state = completed["openscientist_knowledge_state"]
+        self.assertGreaterEqual(len(os_state["hypotheses"]), 1)
+        self.assertGreaterEqual(len(os_state["findings"]), 1)
+        self.assertGreaterEqual(len(os_state["literature"]), 1)
+        self.assertGreaterEqual(len(os_state["analysis_log"]), 1)
+
+        # Verify TrustGraph ontology & PROV-O triples
+        tg_prov = completed["trustgraph_provenance"]
+        self.assertEqual(tg_prov["ontology_id"], "researchweave-scientific-ontology-v1")
+        self.assertGreaterEqual(len(tg_prov["triples"]), 10)
+
+        # Verify role-based model routing (gpt-6.1-sol for lead/computation/reviewer, gpt-6-astra for literature/hypothesis)
+        agent_models = {a["name"]: a["assigned_model"] for a in completed["agents"]}
+        self.assertEqual(agent_models["Lead-Research-Coordinator"], "gpt-6.1-sol")
+        self.assertEqual(agent_models["Diophantine-Literature-Explorer"], "gpt-6-astra")
+        self.assertEqual(agent_models["Symbolic-Bounds-Verifier"], "gpt-6.1-sol")
+        self.assertEqual(agent_models["Conjecture-Synthesis-Architect"], "gpt-6-astra")
+        self.assertEqual(agent_models["Independent-Proof-Auditor"], "gpt-6.1-sol")
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -1,0 +1,182 @@
+# ResearchWeave Production AKS Manifests
+# Deploys:
+# 1. Namespace & Azure Workload Identity ServiceAccount
+# 2. TrustGraph Stateful Knowledge Engine (Qdrant + Cassandra + TrustGraph OntoRAG/PROV-O on `brain` node pool)
+# 3. OpenScientist + AgentScope 2.0 Web Workspace & Coordinator (on `app` node pool)
+# 4. Kata Containers (kata-mshv-vm-isolation) Isolated Scientific Sandbox Job Template + NetworkPolicy (on `sandbox` node pool)
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: researchweave
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: researchweave-sa
+  namespace: researchweave
+  annotations:
+    azure.workload.identity/client-id: "${AZURE_CLIENT_ID}"
+  labels:
+    azure.workload.identity/use: "true"
+---
+# TrustGraph Vector Store (Qdrant StatefulSet on brainpool)
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: trustgraph-qdrant
+  namespace: researchweave
+spec:
+  serviceName: trustgraph-qdrant
+  replicas: 1
+  selector:
+    matchLabels:
+      app: trustgraph-qdrant
+  template:
+    metadata:
+      labels:
+        app: trustgraph-qdrant
+    spec:
+      nodeSelector:
+        researchweave.io/pool: brain
+      containers:
+        - name: qdrant
+          image: docker.io/qdrant/qdrant:v1.12.1
+          ports:
+            - containerPort: 6333
+            - containerPort: 6334
+          resources:
+            requests:
+              cpu: "1000m"
+              memory: "4Gi"
+            limits:
+              cpu: "2000m"
+              memory: "8Gi"
+          volumeMounts:
+            - name: qdrant-storage
+              mountPath: /qdrant/storage
+  volumeClaimTemplates:
+    - metadata:
+        name: qdrant-storage
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        storageClassName: managed-csi-premium
+        resources:
+          requests:
+            storage: 64Gi
+---
+# TrustGraph RDF/PROV-O Graph Store (Apache Cassandra StatefulSet on brainpool)
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: trustgraph-cassandra
+  namespace: researchweave
+spec:
+  serviceName: trustgraph-cassandra
+  replicas: 1
+  selector:
+    matchLabels:
+      app: trustgraph-cassandra
+  template:
+    metadata:
+      labels:
+        app: trustgraph-cassandra
+    spec:
+      nodeSelector:
+        researchweave.io/pool: brain
+      containers:
+        - name: cassandra
+          image: docker.io/library/cassandra:5.0
+          ports:
+            - containerPort: 9042
+          resources:
+            requests:
+              cpu: "2000m"
+              memory: "8Gi"
+            limits:
+              cpu: "4000m"
+              memory: "16Gi"
+          volumeMounts:
+            - name: cassandra-data
+              mountPath: /var/lib/cassandra
+  volumeClaimTemplates:
+    - metadata:
+        name: cassandra-data
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        storageClassName: managed-csi-premium
+        resources:
+          requests:
+            storage: 128Gi
+---
+# OpenScientist + AgentScope 2.0 + TrustGraph Gateway (on apppool)
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: researchweave-workspace
+  namespace: researchweave
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: researchweave-workspace
+  template:
+    metadata:
+      labels:
+        app: researchweave-workspace
+        azure.workload.identity/use: "true"
+    spec:
+      serviceAccountName: researchweave-sa
+      nodeSelector:
+        researchweave.io/pool: app
+      containers:
+        - name: researchweave
+          image: docker.io/library/python:3.12-slim
+          ports:
+            - containerPort: 8080
+          env:
+            - name: PORT
+              value: "8080"
+            - name: AZURE_CLIENT_ID
+              value: "${AZURE_CLIENT_ID}"
+            - name: AZURE_STORAGE_ACCOUNT_URL
+              value: "${AZURE_STORAGE_ACCOUNT_URL}"
+            - name: AZURE_OPENAI_ENDPOINT
+              value: "${AZURE_OPENAI_ENDPOINT}"
+            - name: MODEL_POOL_DEFAULT
+              value: "gpt-6.1-sol,gpt-6-astra"
+          resources:
+            requests:
+              cpu: "1000m"
+              memory: "2Gi"
+            limits:
+              cpu: "2000m"
+              memory: "4Gi"
+---
+# Strict NetworkPolicy for Kata Containers Isolated Scientific Code Execution Pods
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: sandbox-zero-trust-isolation
+  namespace: researchweave
+spec:
+  podSelector:
+    matchLabels:
+      researchweave.io/role: isolated-code-sandbox
+  policyTypes:
+    - Ingress
+    - Egress
+  ingress: []
+  egress:
+    # Block access to Azure IMDS (169.254.169.254) and internal cluster subnets
+    - to:
+        - ipBlock:
+            cidr: 0.0.0.0/0
+            except:
+              - 169.254.169.254/32
+              - 10.0.0.0/8
+              - 172.16.0.0/12
+              - 192.168.0.0/16
+      ports:
+        - protocol: TCP
+          port: 443

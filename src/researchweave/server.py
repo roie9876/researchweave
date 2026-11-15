@@ -98,7 +98,7 @@ def create_http_handler(app: ResearchWeaveApp) -> type[BaseHTTPRequestHandler]:
                         {
                             "status": "healthy",
                             "service": "researchweave",
-                            "version": "0.1.0",
+                            "version": "0.2.0",
                             "available_models": [
                                 "gpt-6.1-sol",
                                 "gpt-6-astra",
@@ -107,6 +107,12 @@ def create_http_handler(app: ResearchWeaveApp) -> type[BaseHTTPRequestHandler]:
                             "foundry_endpoint": app.coordinator.foundry.endpoint or None,
                             "blob_storage_connected": app.blob_store._blob_service_client is not None,
                             "blob_storage_url": app.blob_store.storage_account_url or None,
+                            "open_source_stack": {
+                                "discovery_engine": "openscientist",
+                                "agent_runtime": app.coordinator.agentscope_runtime.runtime_info,
+                                "knowledge_graph": "trustgraph-prov-o-ontology",
+                                "document_ingestion": "azure-ai-content-understanding",
+                            },
                         }
                     )
                     return

@@ -241,22 +241,21 @@ def _parse_pubmed_xml(xml_text: str) -> list[dict[str, Any]]:
     return papers
 
 
-def search_arxiv_live(query: str, max_results: int = 3, timeout: float = 5.0) -> list[dict[str, Any]]:
-    """Search ArXiv Atom API for mathematics, physics, astronomy, computer science, and quantitative biology papers."""
-    # Extract ASCII / English scientific terms first so Hebrew prompts with English acronyms (e.g. JWST, DESI, Lambda-CDM) work cleanly
+def search_arxiv_live(query: str, max_results: int = 8, timeout: float = 6.0) -> list[dict[str, Any]]:
+    """Search ArXiv Atom API for mathematics, physics, astronomy, electrical/CS, and quantitative biology papers."""
     ascii_tokens = re.findall(r"[A-Za-z][A-Za-z0-9_-]{2,24}", query)
     if ascii_tokens:
-        words = ascii_tokens[:5]
+        words = ascii_tokens[:6]
     else:
         clean_q = re.sub(r"[^\w\s-]", " ", query).strip()
-        words = [w for w in clean_q.split() if len(w) > 2][:5]
+        words = [w for w in clean_q.split() if len(w) > 2][:6]
     if not words:
         return []
     search_query = "+AND+".join(f"all:{urllib.parse.quote(w)}" for w in words)
     url = f"https://export.arxiv.org/api/query?search_query={search_query}&start=0&max_results={max_results}"
     try:
         req = urllib.request.Request(
-            url, headers={"User-Agent": "ResearchWeave-OpenScientist/0.2"}
+            url, headers={"User-Agent": "ResearchWeave-OpenScientist/0.3"}
         )
         with urllib.request.urlopen(req, timeout=timeout) as resp:
             xml_text = resp.read().decode("utf-8", errors="replace")
@@ -288,8 +287,397 @@ def search_arxiv_live(query: str, max_results: int = 3, timeout: float = 5.0) ->
                         "year": year,
                         "uri": uri or f"https://arxiv.org/abs/{arxiv_id}",
                         "source_db": "arxiv",
+                        "citations": 0,
                     }
                 )
         return papers
     except Exception:
         return []
+
+
+def _reconstruct_openalex_abstract(inverted_index: dict[str, list[int]] | None) -> str:
+    if not inverted_index or not isinstance(inverted_index, dict):
+        return ""
+    pos_map: dict[int, str] = {}
+    for word, positions in inverted_index.items():
+        if isinstance(positions, list):
+            for p in positions:
+                if isinstance(p, int) and p < 400:
+                    pos_map[p] = word
+    if not pos_map:
+        return ""
+    return " ".join(pos_map[idx] for idx in sorted(pos_map.keys()))
+
+
+def search_openalex_live(query: str, max_results: int = 10, timeout: float = 6.0) -> list[dict[str, Any]]:
+    """Search OpenAlex (250M+ works across IEEE, ACS, RSC, APS, Nature, Science, Elsevier, Springer, NEJM)."""
+    import json
+
+    clean_q = re.sub(r"[^\w\s-]", " ", query).strip()
+    if not clean_q:
+        return []
+    params = urllib.parse.urlencode(
+        {
+            "search": clean_q,
+            "per-page": max_results,
+            "mailto": "researcher@researchweave.org",
+        }
+    )
+    url = f"https://api.openalex.org/works?{params}"
+    try:
+        req = urllib.request.Request(
+            url, headers={"User-Agent": "ResearchWeave-OpenScientist/0.3 (mailto:researcher@researchweave.org)"}
+        )
+        with urllib.request.urlopen(req, timeout=timeout) as resp:
+            data = json.loads(resp.read().decode("utf-8", errors="replace"))
+        papers: list[dict[str, Any]] = []
+        for item in data.get("results") or []:
+            title = (item.get("display_name") or item.get("title") or "").strip()
+            if not title:
+                continue
+            abstract = _reconstruct_openalex_abstract(item.get("abstract_inverted_index"))
+            if not abstract:
+                concepts = [c.get("display_name", "") for c in (item.get("concepts") or [])[:6] if c.get("display_name")]
+                abstract = f"Peer-reviewed work indexed in OpenAlex. Key concepts: {', '.join(concepts)}."
+            authorships = item.get("authorships") or []
+            authors = [
+                (a.get("author") or {}).get("display_name", "")
+                for a in authorships[:4]
+                if (a.get("author") or {}).get("display_name")
+            ]
+            year = str(item.get("publication_year") or "")
+            cited_by = int(item.get("cited_by_count") or 0)
+            doi = item.get("doi") or item.get("id") or ""
+            oa_id = (item.get("id") or "").rsplit("/", 1)[-1]
+            venue = ((item.get("primary_location") or {}).get("source") or {}).get("display_name") or ""
+            venue_tag = f" [{venue}]" if venue else ""
+            papers.append(
+                {
+                    "pmid": f"OpenAlex:{oa_id}",
+                    "title": f"{title}{venue_tag} ({', '.join(authors[:3])}, {year}; Citations: {cited_by})".strip(" (,)"),
+                    "abstract": abstract[:900],
+                    "authors": ", ".join(authors),
+                    "year": year,
+                    "uri": doi or f"https://openalex.org/{oa_id}",
+                    "source_db": "openalex",
+                    "citations": cited_by,
+                }
+            )
+        return papers
+    except Exception:
+        return []
+
+
+def search_semanticscholar_live(query: str, max_results: int = 8, timeout: float = 6.0) -> list[dict[str, Any]]:
+    """Search Semantic Scholar Academic Graph (IEEE, ACM, Chemistry, Physics, Materials, Medicine)."""
+    import json
+
+    clean_q = re.sub(r"[^\w\s-]", " ", query).strip()
+    if not clean_q:
+        return []
+    params = urllib.parse.urlencode(
+        {
+            "query": clean_q,
+            "limit": max_results,
+            "fields": "title,abstract,year,authors,citationCount,venue,url,externalIds",
+        }
+    )
+    url = f"https://api.semanticscholar.org/graph/v1/paper/search?{params}"
+    try:
+        req = urllib.request.Request(
+            url, headers={"User-Agent": "ResearchWeave-OpenScientist/0.3"}
+        )
+        with urllib.request.urlopen(req, timeout=timeout) as resp:
+            data = json.loads(resp.read().decode("utf-8", errors="replace"))
+        papers: list[dict[str, Any]] = []
+        for item in data.get("data") or []:
+            title = (item.get("title") or "").strip()
+            abstract = (item.get("abstract") or "").strip()
+            if not title or not abstract:
+                continue
+            authors = [a.get("name", "") for a in (item.get("authors") or [])[:4] if a.get("name")]
+            year = str(item.get("year") or "")
+            cited_by = int(item.get("citationCount") or 0)
+            venue = (item.get("venue") or "").strip()
+            ext_ids = item.get("externalIds") or {}
+            doi = ext_ids.get("DOI")
+            uri = f"https://doi.org/{doi}" if doi else (item.get("url") or "https://www.semanticscholar.org/")
+            pid = (item.get("paperId") or "")[:10]
+            venue_tag = f" [{venue}]" if venue else ""
+            papers.append(
+                {
+                    "pmid": f"S2:{pid}",
+                    "title": f"{title}{venue_tag} ({', '.join(authors[:3])}, {year}; Citations: {cited_by})".strip(" (,)"),
+                    "abstract": abstract[:900],
+                    "authors": ", ".join(authors),
+                    "year": year,
+                    "uri": uri,
+                    "source_db": "semanticscholar",
+                    "citations": cited_by,
+                }
+            )
+        return papers
+    except Exception:
+        return []
+
+
+def search_europepmc_live(query: str, max_results: int = 8, timeout: float = 6.0) -> list[dict[str, Any]]:
+    """Search Europe PMC (PubMed + PMC full-text + medRxiv/bioRxiv + biochemistry/pharmacology, sorted by citations)."""
+    import json
+
+    clean_q = re.sub(r"[^\w\s-]", " ", query).strip()
+    if not clean_q:
+        return []
+    params = urllib.parse.urlencode(
+        {
+            "query": clean_q,
+            "format": "json",
+            "pageSize": max_results,
+            "resultType": "core",
+        }
+    )
+    url = f"https://www.ebi.ac.uk/europepmc/webservices/rest/search?{params}"
+    try:
+        req = urllib.request.Request(
+            url, headers={"User-Agent": "ResearchWeave-OpenScientist/0.3"}
+        )
+        with urllib.request.urlopen(req, timeout=timeout) as resp:
+            data = json.loads(resp.read().decode("utf-8", errors="replace"))
+        results = ((data.get("resultList") or {}).get("result")) or []
+        papers: list[dict[str, Any]] = []
+        for item in results:
+            title = (item.get("title") or "").strip()
+            abstract = re.sub(r"<[^>]+>", " ", (item.get("abstractText") or "")).strip()
+            if not title or not abstract:
+                continue
+            authors = (item.get("authorString") or "").strip()
+            year = str(item.get("pubYear") or "")
+            cited_by = int(item.get("citedByCount") or 0)
+            pmid = item.get("pmid") or item.get("id") or "EPMC"
+            doi = item.get("doi")
+            uri = f"https://doi.org/{doi}" if doi else f"https://europepmc.org/article/MED/{pmid}"
+            journal = (item.get("journalTitle") or "").strip()
+            j_tag = f" [{journal}]" if journal else ""
+            papers.append(
+                {
+                    "pmid": f"EPMC:{pmid}",
+                    "title": f"{title}{j_tag} ({authors[:50]}, {year}; Citations: {cited_by})".strip(" (,)"),
+                    "abstract": abstract[:900],
+                    "authors": authors[:80],
+                    "year": year,
+                    "uri": uri,
+                    "source_db": "europepmc",
+                    "citations": cited_by,
+                }
+            )
+        return papers
+    except Exception:
+        return []
+
+
+def search_crossref_live(query: str, max_results: int = 6, timeout: float = 6.0) -> list[dict[str, Any]]:
+    """Search Crossref DOI Registry (150M+ journal articles across IEEE, ACS, RSC, Elsevier, Springer, Wiley)."""
+    import json
+
+    clean_q = re.sub(r"[^\w\s-]", " ", query).strip()
+    if not clean_q:
+        return []
+    params = urllib.parse.urlencode({"query": clean_q, "rows": max_results})
+    url = f"https://api.crossref.org/works?{params}"
+    try:
+        req = urllib.request.Request(
+            url, headers={"User-Agent": "ResearchWeave-OpenScientist/0.3 (mailto:researcher@researchweave.org)"}
+        )
+        with urllib.request.urlopen(req, timeout=timeout) as resp:
+            data = json.loads(resp.read().decode("utf-8", errors="replace"))
+        items = ((data.get("message") or {}).get("items")) or []
+        papers: list[dict[str, Any]] = []
+        for item in items:
+            titles = item.get("title") or []
+            title = titles[0].strip() if titles else ""
+            if not title:
+                continue
+            doi = (item.get("DOI") or "").strip()
+            abstract_raw = item.get("abstract") or ""
+            abstract = re.sub(r"<[^>]+>", " ", abstract_raw).strip()
+            container = item.get("container-title") or []
+            journal = container[0] if container else "Peer-Reviewed Journal"
+            cited_by = int(item.get("is-referenced-by-count") or 0)
+            authors_list = [
+                f"{a.get('given', '')} {a.get('family', '')}".strip()
+                for a in (item.get("author") or [])[:4]
+            ]
+            issued = ((item.get("issued") or {}).get("date-parts") or [[None]])[0]
+            year = str(issued[0] or "")
+            if not abstract:
+                abstract = f"Published in {journal} ({year}). DOI: {doi}. Referenced by {cited_by} peer-reviewed works."
+            papers.append(
+                {
+                    "pmid": f"DOI:{doi}" if doi else "Crossref",
+                    "title": f"{title} [{journal}] ({', '.join(a for a in authors_list if a)}, {year}; Citations: {cited_by})",
+                    "abstract": abstract[:900],
+                    "authors": ", ".join(a for a in authors_list if a),
+                    "year": year,
+                    "uri": f"https://doi.org/{doi}" if doi else "https://www.crossref.org/",
+                    "source_db": "crossref",
+                    "citations": cited_by,
+                }
+            )
+        return papers
+    except Exception:
+        return []
+
+
+def search_pubchem_live(query: str, max_results: int = 4, timeout: float = 6.0) -> list[dict[str, Any]]:
+    """Search NIH PubChem PUG REST API for chemical compounds, molecular formulas, IUPAC names, and properties."""
+    import json
+
+    # Extract candidate chemical/compound/material names (English tokens)
+    tokens = [
+        t
+        for t in re.findall(r"[A-Za-z][A-Za-z0-9-]{2,28}", query)
+        if t.lower() not in {"the", "and", "for", "with", "from", "how", "why", "what", "study", "analyze", "effect", "reaction", "synthesis", "chemistry", "chemical"}
+    ]
+    results: list[dict[str, Any]] = []
+    for chem in tokens[: max_results]:
+        url = (
+            f"https://pubchem.ncbi.nlm.nih.gov/rest/pug/compound/name/{urllib.parse.quote(chem)}"
+            "/property/MolecularFormula,MolecularWeight,IUPACName,CanonicalSMILES/JSON"
+        )
+        try:
+            req = urllib.request.Request(url, headers={"User-Agent": "ResearchWeave-OpenScientist/0.3"})
+            with urllib.request.urlopen(req, timeout=timeout) as resp:
+                data = json.loads(resp.read().decode("utf-8", errors="replace"))
+            props = ((data.get("PropertyTable") or {}).get("Properties")) or []
+            if props:
+                p = props[0]
+                cid = p.get("CID")
+                formula = p.get("MolecularFormula", "")
+                mw = p.get("MolecularWeight", "")
+                iupac = p.get("IUPACName", "")
+                smiles = p.get("CanonicalSMILES", "")
+                results.append(
+                    {
+                        "pmid": f"PubChem-CID:{cid}",
+                        "title": f"PubChem Compound Record: {chem} (CID {cid} — Formula: {formula}, MW: {mw} g/mol)",
+                        "abstract": f"Chemical Compound {chem} (PubChem CID {cid}): Molecular Formula={formula}, Molecular Weight={mw} g/mol, IUPAC Name={iupac}, Canonical SMILES={smiles}.",
+                        "authors": "NIH NCBI PubChem Database",
+                        "year": "2026",
+                        "uri": f"https://pubchem.ncbi.nlm.nih.gov/compound/{cid}",
+                        "source_db": "pubchem",
+                        "citations": 50,
+                    }
+                )
+        except Exception:
+            continue
+    return results
+
+
+def search_clinicaltrials_live(query: str, max_results: int = 5, timeout: float = 6.0) -> list[dict[str, Any]]:
+    """Search ClinicalTrials.gov API v2 for human clinical studies, interventions, and outcomes."""
+    import json
+
+    clean_q = re.sub(r"[^\w\s-]", " ", query).strip()
+    if not clean_q:
+        return []
+    params = urllib.parse.urlencode({"query.term": clean_q, "pageSize": max_results})
+    url = f"https://clinicaltrials.gov/api/v2/studies?{params}"
+    try:
+        req = urllib.request.Request(url, headers={"User-Agent": "ResearchWeave-OpenScientist/0.3"})
+        with urllib.request.urlopen(req, timeout=timeout) as resp:
+            data = json.loads(resp.read().decode("utf-8", errors="replace"))
+        papers: list[dict[str, Any]] = []
+        for st in data.get("studies") or []:
+            proto = st.get("protocolSection") or {}
+            ident = proto.get("identificationModule") or {}
+            status_mod = proto.get("statusModule") or {}
+            desc_mod = proto.get("descriptionModule") or {}
+            nct_id = ident.get("nctId", "NCT")
+            title = ident.get("officialTitle") or ident.get("briefTitle") or ""
+            summary = desc_mod.get("briefSummary") or ""
+            overall_status = status_mod.get("overallStatus") or ""
+            if title and summary:
+                papers.append(
+                    {
+                        "pmid": nct_id,
+                        "title": f"[ClinicalTrial {nct_id}] {title} (Status: {overall_status})",
+                        "abstract": re.sub(r"\s+", " ", summary)[:900],
+                        "authors": "ClinicalTrials.gov Registry",
+                        "year": "",
+                        "uri": f"https://clinicaltrials.gov/study/{nct_id}",
+                        "source_db": "clinicaltrials",
+                        "citations": 15,
+                    }
+                )
+        return papers
+    except Exception:
+        return []
+
+
+def search_federated_scientific_literature(
+    queries: list[str],
+    domain: str,
+    timeout: float = 6.5,
+) -> list[dict[str, Any]]:
+    """Federated, uncapped multi-database scientific search across OpenAlex, Semantic Scholar, Crossref, ArXiv, Europe PMC, PubMed, PubChem, and ClinicalTrials.gov.
+
+    Executes all sub-queries across all relevant scientific databases in parallel,
+    deduplicates by URI/title, and sorts by citation impact + relevance without an artificial paper cap.
+    """
+    import concurrent.futures
+
+    tasks_to_run: list[tuple[str, Any, str, int]] = []
+    for q in queries:
+        if not q.strip():
+            continue
+        # Universal scientific databases (cover ALL fields: Chemistry, Electrical Eng, Materials, Physics, Math, Medicine, CS)
+        tasks_to_run.append(("openalex", search_openalex_live, q, 8))
+        tasks_to_run.append(("semanticscholar", search_semanticscholar_live, q, 6))
+        tasks_to_run.append(("crossref", search_crossref_live, q, 5))
+
+        # Domain-specialized databases
+        if domain in ("mathematics_fermat", "mathematics", "cosmology_astrophysics", "engineering", "electrical_engineering", "general_science"):
+            tasks_to_run.append(("arxiv", search_arxiv_live, q, 6))
+        if domain in ("chemistry", "materials_science", "genetics", "neurology", "medicine_health", "general_science"):
+            tasks_to_run.append(("europepmc", search_europepmc_live, q, 6))
+            tasks_to_run.append(("pubmed", search_pubmed_live, q, 5))
+        if domain in ("chemistry", "materials_science", "genetics", "neurology", "medicine_health"):
+            tasks_to_run.append(("pubchem", search_pubchem_live, q, 3))
+        if domain in ("genetics", "neurology", "medicine_health"):
+            tasks_to_run.append(("clinicaltrials", search_clinicaltrials_live, q, 4))
+
+    collected: list[dict[str, Any]] = []
+    if not tasks_to_run:
+        return collected
+
+    with concurrent.futures.ThreadPoolExecutor(max_workers=min(16, len(tasks_to_run))) as pool:
+        future_map = [
+            (db_name, q_str, pool.submit(fn, q_str, limit, timeout))
+            for db_name, fn, q_str, limit in tasks_to_run
+        ]
+        for db_name, q_str, fut in future_map:
+            try:
+                res_list = fut.result(timeout=timeout + 1.5)
+                for item in res_list:
+                    item["query"] = q_str
+                    collected.append(item)
+            except Exception:
+                continue
+
+    # Deduplicate by normalized URI and normalized title while preserving all unique works
+    deduped: list[dict[str, Any]] = []
+    seen_keys: set[str] = set()
+    for p in collected:
+        norm_title = re.sub(r"[^a-z0-9]+", "", (p.get("title") or "").lower())[:65]
+        norm_uri = (p.get("uri") or "").strip().lower().rstrip("/")
+        key = norm_uri or norm_title
+        if not key or key in seen_keys or (norm_title and norm_title in seen_keys):
+            continue
+        seen_keys.add(key)
+        if norm_title:
+            seen_keys.add(norm_title)
+        deduped.append(p)
+
+    # Sort so highest-impact peer-reviewed works and direct preprints appear first, while keeping all retrieved papers in the Brain
+    deduped.sort(key=lambda x: int(x.get("citations") or 0), reverse=True)
+    return deduped

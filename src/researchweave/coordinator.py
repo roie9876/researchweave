@@ -45,6 +45,7 @@ from .models import (
 from .openscientist_engine import (
     OpenScientistKnowledgeState,
     search_arxiv_live,
+    search_federated_scientific_literature,
     search_pubmed_live,
 )
 from .reports import build_live_report_markdown
@@ -251,9 +252,57 @@ class ResearchCoordinator:
             return "cosmology_astrophysics"
         if any(
             k in lower
-            for k in ("voltage", "circuit", "semiconductor", "battery", "material", "degradation", "thermal")
+            for k in (
+                "chemistry",
+                "chemical",
+                "catalys",
+                "molecule",
+                "molecular",
+                "polymer",
+                "electrochem",
+                "reaction",
+                "synthesis",
+                "כימי",
+                "מולקול",
+                "קטליז",
+                "תגובה כימית",
+                "פולימר",
+            )
         ):
-            return "engineering"
+            return "chemistry"
+        if any(
+            k in lower
+            for k in (
+                "voltage",
+                "circuit",
+                "semiconductor",
+                "transistor",
+                "power grid",
+                "inverter",
+                "rf ",
+                "antenna",
+                "signal processing",
+                "cmos",
+                "mosfet",
+                "חשמל",
+                "מעגל חשמלי",
+                "מוליך למחצה",
+                "טרנזיסטור",
+                "מתח",
+                "אלקטרוניק",
+            )
+        ):
+            return "electrical_engineering"
+        if any(
+            k in lower
+            for k in ("battery", "material", "degradation", "thermal", "alloy", "cathode", "anode", "סוללה", "חומרים")
+        ):
+            return "materials_science"
+        if any(
+            k in lower
+            for k in ("blood", "ferritin", "tsh", "thyroid", "vitamin", "clinical", "patient", "בדיקות דם", "רפואי", "פריטין", "בלוטת התריס")
+        ):
+            return "medicine_health"
         return "general_science"
 
     def generate_clarifying_questions(self, objective: str, language: str = "en") -> list[str]:
@@ -904,7 +953,7 @@ class ResearchCoordinator:
     def _plan_search_queries_with_lead_agent(
         self, inv: dict[str, Any], domain: str
     ) -> list[str]:
-        """Have Lead-Research-Coordinator (`gpt-6.1-sol`) decompose the objective into 3-4 English scientific search queries."""
+        """Have Lead-Research-Coordinator (`gpt-6.1-sol`) decompose the objective into as many English scientific search queries as needed."""
         inv_id = inv["id"]
         lead_id = f"lead-{inv_id}"
         lead_model = self._pick_model_for_role(inv.get("model_pool") or ["gpt-6.1-sol"], "lead")
@@ -918,15 +967,14 @@ class ResearchCoordinator:
             name="Lead-Research-Coordinator",
             system_prompt=(
                 "You are the Lead Research Coordinator in ResearchWeave. "
-                "Decompose the user's research objective into 3 distinct, non-overlapping English scientific search queries "
-                "for ArXiv / PubMed. Each query MUST contain 2-4 focused keywords for ONE distinct sub-topic "
-                "(e.g., if the objective mentions both JWST and DESI, Query 1 must focus ONLY on JWST high-z galaxies, "
-                "Query 2 must focus ONLY on DESI BAO dark energy w0 wa, and Query 3 on the theoretical model). "
-                "Never combine two different surveys/telescopes in the same query string. "
-                'Respond ONLY with valid JSON: {"queries": ["query 1", "query 2", "query 3"]}'
+                "Decompose the user's research objective into distinct, non-overlapping English scientific search queries "
+                "(generate as many sub-queries as needed to cover every sub-topic, mechanism, compound, circuit topology, or clinical/observational dataset—typically 4 to 6 queries). "
+                "Each query MUST contain 2-4 focused English keywords for ONE distinct sub-topic. "
+                "Never combine two different surveys, telescopes, or unrelated mechanisms in the same query string. "
+                'Respond ONLY with valid JSON: {"queries": ["query 1", "query 2", "query 3", "query 4", ...]}'
             ),
             assigned_model=lead_model,
-            user_prompt=f"Title: {inv['title']}\nObjective: {inv['objective']}",
+            user_prompt=f"Title: {inv['title']}\nDomain: {domain}\nObjective: {inv['objective']}",
             fallback_text="",
         )
         self._record_agent_usage(inv_id, lead_id, plan_usage)
@@ -950,10 +998,10 @@ class ResearchCoordinator:
                         inv_id,
                         "lead_coordinator_query_plan",
                         "Lead-Research-Coordinator",
-                        f"Decomposed objective via {used_dep} into {len(qs)} targeted literature queries: {', '.join(qs)}",
+                        f"Decomposed objective via {used_dep} into {len(qs)} targeted multi-database search queries: {', '.join(qs)}",
                         {"queries": qs, "model": used_dep, "tokens": plan_usage.get("total_tokens", 0)},
                     )
-                    return qs[:4]
+                    return qs
             except Exception:
                 pass
         return default_queries
@@ -1376,47 +1424,32 @@ class ResearchCoordinator:
             f"- [{s['id']}] {s['title']}: {s.get('excerpt', '')}" for s in uploaded_sources
         )
 
-        # Live Lead-Research-Coordinator Query Decomposition + Parallel OpenScientist Literature Search (PubMed / ArXiv)
+        # Live Lead-Research-Coordinator Query Decomposition + Uncapped Multi-Database Federated Retrieval
+        # (OpenAlex + Semantic Scholar + Crossref + ArXiv + Europe PMC + PubMed + PubChem + ClinicalTrials.gov)
         if self.foundry.is_configured:
-            import concurrent.futures
-
             search_queries = self._plan_search_queries_with_lead_agent(inv, domain)
-            use_arxiv = domain in (
-                "mathematics_fermat",
-                "mathematics",
-                "engineering",
-                "cosmology_astrophysics",
-                "general_science",
-            )
-            search_fn = search_arxiv_live if use_arxiv else search_pubmed_live
-
-            with concurrent.futures.ThreadPoolExecutor(max_workers=3) as pool:
-                futures = [(sq, pool.submit(search_fn, sq, 2)) for sq in search_queries[:3]]
-                seen_uris: set[str] = set()
-                for sq, fut in futures:
-                    try:
-                        live_papers = fut.result(timeout=8.0)
-                    except Exception:
-                        live_papers = []
-                    for p in live_papers:
-                        p_uri = p.get("uri") or ""
-                        if p_uri in seen_uris:
-                            continue
-                        seen_uris.add(p_uri)
-                        self.store.add_source(
-                            SourceRecord(
-                                investigation_id=inv_id,
-                                title=f"[{p.get('source_db', 'lit').upper()} {p.get('pmid')}] {p.get('title')}",
-                                source_type="scientific_paper",
-                                uri_or_path=p_uri or "https://arxiv.org/",
-                                blob_container=inv["blob_container"],
-                                content_hash=hashlib.sha256(
-                                    f"{p.get('pmid')}:{p.get('title')}".encode("utf-8")
-                                ).hexdigest(),
-                                excerpt=p.get("abstract", "")[:600],
-                                metadata={"pmid": p.get("pmid"), "source_db": p.get("source_db"), "query": sq},
-                            )
-                        )
+            federated_papers = search_federated_scientific_literature(search_queries, domain=domain)
+            for p in federated_papers:
+                p_uri = p.get("uri") or "https://openalex.org/"
+                self.store.add_source(
+                    SourceRecord(
+                        investigation_id=inv_id,
+                        title=f"[{p.get('source_db', 'lit').upper()} {p.get('pmid')}] {p.get('title')}",
+                        source_type="scientific_paper",
+                        uri_or_path=p_uri,
+                        blob_container=inv["blob_container"],
+                        content_hash=hashlib.sha256(
+                            f"{p.get('pmid')}:{p.get('title')}".encode("utf-8")
+                        ).hexdigest(),
+                        excerpt=p.get("abstract", "")[:650],
+                        metadata={
+                            "pmid": p.get("pmid"),
+                            "source_db": p.get("source_db"),
+                            "citations": p.get("citations", 0),
+                            "query": p.get("query", ""),
+                        },
+                    )
+                )
 
         all_lit_sources = self.store.list_sources(inv_id)
         if not all_lit_sources:
@@ -1425,7 +1458,7 @@ class ResearchCoordinator:
                     investigation_id=inv_id,
                     title=f"Primary Scientific Literature Context for {inv['title']}",
                     source_type="scientific_paper",
-                    uri_or_path="https://arxiv.org/",
+                    uri_or_path="https://openalex.org/",
                     blob_container=inv["blob_container"],
                     content_hash=hashlib.sha256(inv["objective"].encode("utf-8")).hexdigest(),
                     excerpt=inv["objective"][:500],
@@ -1433,10 +1466,14 @@ class ResearchCoordinator:
             )
             all_lit_sources = [fallback_src.model_dump()]
 
+        # Pass top 20 citation-ranked sources in full detail + titles of all remaining sources so no paper is missed
         lit_context = "\n".join(
-            f"- [{s['id']}] {s['title']}: {s.get('excerpt', '')[:320]}"
-            for s in all_lit_sources[:6]
+            f"- [{s['id']}] {s['title']}: {s.get('excerpt', '')[:280]}"
+            for s in all_lit_sources[:20]
         )
+        if len(all_lit_sources) > 20:
+            extra_titles = "\n".join(f"- [{s['id']}] {s['title']}" for s in all_lit_sources[20:])
+            lit_context += f"\n\nAdditional Indexed Sources ({len(all_lit_sources) - 20} more):\n{extra_titles}"
 
         lit_live, lit_dep, used_live, lit_usage = self.agentscope_runtime.run_specialist_turn(
             agent_id=task.assigned_agent_id or f"lit-{inv_id}",
@@ -1475,7 +1512,7 @@ class ResearchCoordinator:
                         category="observation",
                         verification_state=VerificationState.OBSERVED,
                         confidence=0.90,
-                        supporting_source_ids=[s["id"] for s in all_lit_sources[:4]],
+                        supporting_source_ids=[s["id"] for s in all_lit_sources],
                         objective_revision=rev_num,
                     )
                 )
@@ -1658,7 +1695,7 @@ class ResearchCoordinator:
     ) -> None:
         inv_id = inv["id"]
         sources = self.store.list_sources(inv_id)
-        src_ids = [s["id"] for s in sources[:3]]
+        src_ids = [s["id"] for s in sources]
 
         if domain == "mathematics_fermat":
             baseline_statement = (
@@ -1686,8 +1723,8 @@ class ResearchCoordinator:
             if s.get("source_type") == "uploaded_file"
         )
         lit_excerpts = "\n".join(
-            f"- [{s['id']}] {s['title']}: {s.get('excerpt', '')[:300]}"
-            for s in sources[:5]
+            f"- [{s['id']}] {s['title']}: {s.get('excerpt', '')[:250]}"
+            for s in sources[:16]
         )
         live_text, used_dep, used_live, hyp_usage = self.agentscope_runtime.run_specialist_turn(
             agent_id=task.assigned_agent_id or f"hyp-{inv_id}",
@@ -1762,8 +1799,8 @@ class ResearchCoordinator:
             f"- [ID={c.get('id')} | state={c.get('verification_state')}] {c.get('statement')}" for c in claims
         )
         sources_digest = "\n".join(
-            f"- [{s.get('id')}] {s.get('title')} ({s.get('uri_or_path')}): {s.get('excerpt', '')[:260]}"
-            for s in sources[:8]
+            f"- [{s.get('id')}] {s.get('title')} ({s.get('uri_or_path')}): {s.get('excerpt', '')[:220]}"
+            for s in sources[:18]
         )
         sandbox_digest = "\n".join(
             f"Task '{t.get('title')}':\n```python\n{t.get('code_executed')}\n```\nOutput: `{t.get('code_output')}`"

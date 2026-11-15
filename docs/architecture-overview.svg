@@ -1,0 +1,562 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1440 1040" width="100%" height="100%" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif">
+  <defs>
+    <linearGradient id="coreBg" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#e8f4fd"/>
+      <stop offset="100%" stop-color="#d4ecfc"/>
+    </linearGradient>
+    <linearGradient id="moduleBg" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#9ad4f7"/>
+      <stop offset="100%" stop-color="#7ec4f2"/>
+    </linearGradient>
+    <linearGradient id="domainBg" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#fdf0f0"/>
+      <stop offset="50%" stop-color="#fdf4f5"/>
+      <stop offset="100%" stop-color="#fef5eb"/>
+    </linearGradient>
+    <linearGradient id="azureHeader" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#0078d4"/>
+      <stop offset="100%" stop-color="#005a9e"/>
+    </linearGradient>
+    <filter id="shadow" x="-2%" y="-2%" width="104%" height="106%">
+      <feDropShadow dx="0" dy="2" stdDeviation="3" flood-color="#0f172a" flood-opacity="0.08"/>
+    </filter>
+    <marker id="arrow" viewBox="0 0 10 10" refX="7" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M 0 1.5 L 8 5 L 0 8.5 z" fill="#1e293b"/>
+    </marker>
+    <marker id="arrowBlue" viewBox="0 0 10 10" refX="7" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M 0 1.5 L 8 5 L 0 8.5 z" fill="#0284c7"/>
+    </marker>
+  </defs>
+
+  <!-- Main Canvas Background -->
+  <rect width="1440" height="1040" rx="16" fill="#ffffff"/>
+
+  <!-- ===================================================================== -->
+  <!-- TOP LAYER: STORAGE, DATABASES & COMPANY BRAIN KNOWLEDGE BACKENDS       -->
+  <!-- ===================================================================== -->
+  <rect x="245" y="16" width="1175" height="128" rx="16" fill="#ffffff" stroke="#60a5fa" stroke-width="2" filter="url(#shadow)"/>
+  <text x="268" y="40" font-size="12" font-weight="700" fill="#1d4ed8" letter-spacing="0.6">COMPANY BRAIN STORAGE, GRAPH &amp; RETRIEVAL BACKENDS (AZURE + OPEN SOURCE)</text>
+
+  <!-- Row 1 of Top Storage Box -->
+  <!-- Azure Blob Storage -->
+  <g transform="translate(268, 52)">
+    <rect width="210" height="34" rx="8" fill="#eff6ff" stroke="#93c5fd" stroke-width="1.2"/>
+    <circle cx="20" cy="17" r="10" fill="#0078d4"/>
+    <text x="20" y="21" font-size="10" font-weight="800" fill="#ffffff" text-anchor="middle">Az</text>
+    <text x="38" y="15" font-size="12" font-weight="700" fill="#0f172a">Azure Blob Storage</text>
+    <text x="38" y="28" font-size="10" fill="#475569">Per-Run Container (rw-inv-*)</text>
+  </g>
+
+  <!-- SQLite -->
+  <g transform="translate(494, 52)">
+    <rect width="205" height="34" rx="8" fill="#f0fdf4" stroke="#86efac" stroke-width="1.2"/>
+    <rect x="10" y="7" width="20" height="20" rx="4" fill="#059669"/>
+    <text x="20" y="21" font-size="9" font-weight="800" fill="#ffffff" text-anchor="middle">SQL</text>
+    <text x="38" y="15" font-size="12" font-weight="700" fill="#0f172a">SQLite 3 (OSS Built-in)</text>
+    <text x="38" y="28" font-size="10" fill="#475569">Active Local State &amp; Brain DB</text>
+  </g>
+
+  <!-- Azure Database for PostgreSQL -->
+  <g transform="translate(715, 52)">
+    <rect width="225" height="34" rx="8" fill="#eff6ff" stroke="#93c5fd" stroke-width="1.2"/>
+    <circle cx="20" cy="17" r="10" fill="#336791"/>
+    <text x="20" y="21" font-size="10" font-weight="800" fill="#ffffff" text-anchor="middle">PG</text>
+    <text x="38" y="15" font-size="12" font-weight="700" fill="#0f172a">Azure PostgreSQL</text>
+    <text x="38" y="28" font-size="10" fill="#475569">Target Canonical State + pgvector</text>
+  </g>
+
+  <!-- Apache AGE -->
+  <g transform="translate(956, 52)">
+    <rect width="210" height="34" rx="8" fill="#faf5ff" stroke="#d8b4fe" stroke-width="1.2"/>
+    <circle cx="20" cy="17" r="10" fill="#7c3aed"/>
+    <text x="20" y="21" font-size="9" font-weight="800" fill="#ffffff" text-anchor="middle">AGE</text>
+    <text x="38" y="15" font-size="12" font-weight="700" fill="#0f172a">Apache AGE (OSS)</text>
+    <text x="38" y="28" font-size="10" fill="#475569">OpenCypher Graph on Postgres</text>
+  </g>
+
+  <!-- Azure AI Search -->
+  <g transform="translate(1182, 52)">
+    <rect width="220" height="34" rx="8" fill="#f8fafc" stroke="#cbd5e1" stroke-width="1.2" stroke-dasharray="4,2"/>
+    <circle cx="20" cy="17" r="10" fill="#0284c7"/>
+    <text x="20" y="21" font-size="10" font-weight="800" fill="#ffffff" text-anchor="middle">AI</text>
+    <text x="38" y="15" font-size="12" font-weight="700" fill="#0f172a">Azure AI Search</text>
+    <text x="38" y="28" font-size="10" fill="#64748b">Optional Hybrid Vector Index</text>
+  </g>
+
+  <!-- Row 2 of Top Storage Box (Open Source Knowledge Engines) -->
+  <!-- TrustGraph -->
+  <g transform="translate(268, 96)">
+    <rect width="280" height="34" rx="8" fill="#fff7ed" stroke="#fdba74" stroke-width="1.2"/>
+    <circle cx="20" cy="17" r="10" fill="#ea580c"/>
+    <text x="20" y="21" font-size="9" font-weight="800" fill="#ffffff" text-anchor="middle">TG</text>
+    <text x="38" y="15" font-size="12" font-weight="700" fill="#0f172a">TrustGraph (Apache-2.0)</text>
+    <text x="38" y="28" font-size="10" fill="#475569">OWL Ontology &amp; PROV-O Provenance Patterns</text>
+  </g>
+
+  <!-- LightRAG -->
+  <g transform="translate(564, 96)">
+    <rect width="270" height="34" rx="8" fill="#fefce8" stroke="#fde047" stroke-width="1.2"/>
+    <circle cx="20" cy="17" r="10" fill="#ca8a04"/>
+    <text x="20" y="21" font-size="9" font-weight="800" fill="#ffffff" text-anchor="middle">LR</text>
+    <text x="38" y="15" font-size="12" font-weight="700" fill="#0f172a">LightRAG (MIT)</text>
+    <text x="38" y="28" font-size="10" fill="#475569">Graph-Enhanced Retrieval &amp; Citations</text>
+  </g>
+
+  <!-- Graphiti -->
+  <g transform="translate(850, 96)">
+    <rect width="270" height="34" rx="8" fill="#f0fdfa" stroke="#5eead4" stroke-width="1.2"/>
+    <circle cx="20" cy="17" r="10" fill="#0d9488"/>
+    <text x="20" y="21" font-size="9" font-weight="800" fill="#ffffff" text-anchor="middle">GR</text>
+    <text x="38" y="15" font-size="12" font-weight="700" fill="#0f172a">Graphiti (Apache-2.0)</text>
+    <text x="38" y="28" font-size="10" fill="#475569">Temporal Context &amp; Episode Lineage</text>
+  </g>
+
+  <!-- Local Filesystem Mirror -->
+  <g transform="translate(1136, 96)">
+    <rect width="266" height="34" rx="8" fill="#f1f5f9" stroke="#cbd5e1" stroke-width="1.2"/>
+    <circle cx="20" cy="17" r="10" fill="#475569"/>
+    <text x="20" y="21" font-size="9" font-weight="800" fill="#ffffff" text-anchor="middle">FS</text>
+    <text x="38" y="15" font-size="12" font-weight="700" fill="#0f172a">Local Filesystem Fallback</text>
+    <text x="38" y="28" font-size="10" fill="#475569">Offline Dev &amp; SHA-256 Artifact Mirror</text>
+  </g>
+
+  <!-- ===================================================================== -->
+  <!-- SECOND LAYER: RESEARCH DOMAINS, WORKFLOW GATES & CAPABILITIES          -->
+  <!-- ===================================================================== -->
+  <rect x="245" y="158" width="1175" height="145" rx="16" fill="url(#domainBg)" stroke="#475569" stroke-width="1.5" filter="url(#shadow)"/>
+  <text x="268" y="180" font-size="12.5" font-weight="800" fill="#1e293b">ResearchWeave Domains &amp; Epistemic Capabilities</text>
+
+  <!-- Left Domain Pills (Rose) -->
+  <rect x="265" y="192" width="155" height="40" rx="8" fill="#f8d7da" stroke="#dc3545" stroke-width="1.2"/>
+  <text x="342" y="210" font-size="11.5" font-weight="700" fill="#721c24" text-anchor="middle">Mathematics &amp; Proofs</text>
+  <text x="342" y="224" font-size="9.5" fill="#842029" text-anchor="middle">Fermat / Modular Forms</text>
+
+  <rect x="430" y="192" width="155" height="40" rx="8" fill="#f8d7da" stroke="#dc3545" stroke-width="1.2"/>
+  <text x="507" y="210" font-size="11.5" font-weight="700" fill="#721c24" text-anchor="middle">Genetics &amp; Genomics</text>
+  <text x="507" y="224" font-size="9.5" fill="#842029" text-anchor="middle">Alopecia / AR / Wnt Loci</text>
+
+  <rect x="265" y="244" width="155" height="40" rx="8" fill="#f8d7da" stroke="#dc3545" stroke-width="1.2"/>
+  <text x="342" y="262" font-size="11.5" font-weight="700" fill="#721c24" text-anchor="middle">Neurology &amp; Kinetics</text>
+  <text x="342" y="276" font-size="9.5" fill="#842029" text-anchor="middle">Parkinson's / GBA1 / LRRK2</text>
+
+  <rect x="430" y="244" width="155" height="40" rx="8" fill="#f8d7da" stroke="#dc3545" stroke-width="1.2"/>
+  <text x="507" y="262" font-size="11.5" font-weight="700" fill="#721c24" text-anchor="middle">Engineering &amp; Materials</text>
+  <text x="507" y="276" font-size="9.5" fill="#842029" text-anchor="middle">Thermal / Degradation</text>
+
+  <!-- Inner Core Capability Box -->
+  <rect x="602" y="170" width="798" height="120" rx="14" fill="#fffafa" stroke="#64748b" stroke-width="1.2"/>
+
+  <!-- Purple Workflow Pills -->
+  <rect x="618" y="184" width="210" height="28" rx="7" fill="#dcd6f7" stroke="#6f42c1" stroke-width="1.2"/>
+  <text x="723" y="202" font-size="11.5" font-weight="700" fill="#3b1e77" text-anchor="middle">Pre-Run Clarification Gate</text>
+
+  <rect x="618" y="218" width="210" height="28" rx="7" fill="#dcd6f7" stroke="#6f42c1" stroke-width="1.2"/>
+  <text x="723" y="236" font-size="11.5" font-weight="700" fill="#3b1e77" text-anchor="middle">Dynamic Specialist Teams</text>
+
+  <rect x="618" y="252" width="210" height="28" rx="7" fill="#dcd6f7" stroke="#6f42c1" stroke-width="1.2"/>
+  <text x="723" y="270" font-size="11.5" font-weight="700" fill="#3b1e77" text-anchor="middle">Manager–Workers–Reviewer</text>
+
+  <!-- Center Brand Emblem -->
+  <g transform="translate(848, 185)">
+    <rect x="0" y="0" width="225" height="94" rx="12" fill="#eff6ff" stroke="#3b82f6" stroke-width="1.5"/>
+    <text x="112" y="30" font-size="20" font-weight="800" fill="#0f172a" text-anchor="middle">ResearchWeave</text>
+    <text x="112" y="50" font-size="11.5" font-weight="700" fill="#0284c7" text-anchor="middle">Autonomous Research Org</text>
+    <text x="112" y="68" font-size="10.5" fill="#334155" text-anchor="middle">OpenScientist + AgentScope Patterns</text>
+    <text x="112" y="83" font-size="10" font-weight="600" fill="#059669" text-anchor="middle">REVIEWED_VERIFIED vs HYPOTHESIS</text>
+  </g>
+
+  <!-- Right Feature Pills (Amber/Orange) -->
+  <rect x="1090" y="184" width="142" height="28" rx="7" fill="#fed7aa" stroke="#d97706" stroke-width="1.2"/>
+  <text x="1161" y="202" font-size="11" font-weight="700" fill="#7c2d12" text-anchor="middle">Tool &amp; AST Safety</text>
+
+  <rect x="1240" y="184" width="144" height="28" rx="7" fill="#fed7aa" stroke="#d97706" stroke-width="1.2"/>
+  <text x="1312" y="202" font-size="11" font-weight="700" fill="#7c2d12" text-anchor="middle">SHA-256 Provenance</text>
+
+  <rect x="1090" y="218" width="142" height="28" rx="7" fill="#fed7aa" stroke="#d97706" stroke-width="1.2"/>
+  <text x="1161" y="236" font-size="11" font-weight="700" fill="#7c2d12" text-anchor="middle">Mid-Run Steering</text>
+
+  <rect x="1240" y="218" width="144" height="28" rx="7" fill="#fed7aa" stroke="#d97706" stroke-width="1.2"/>
+  <text x="1312" y="236" font-size="11" font-weight="700" fill="#7c2d12" text-anchor="middle">Company Brain</text>
+
+  <rect x="1090" y="252" width="294" height="28" rx="7" fill="#fed7aa" stroke="#d97706" stroke-width="1.2"/>
+  <text x="1237" y="270" font-size="11" font-weight="700" fill="#7c2d12" text-anchor="middle">Multi-Model Pool Collaboration &amp; Deletion Cascade</text>
+
+  <!-- ===================================================================== -->
+  <!-- LEFT SIDEBAR: PROTOCOLS, INTERFACES & MODEL PROVIDERS                  -->
+  <!-- ===================================================================== -->
+  <!-- Top-Left: Interfaces & Protocols -->
+  <rect x="18" y="16" width="205" height="225" rx="16" fill="#ffffff" stroke="#60a5fa" stroke-width="2" filter="url(#shadow)"/>
+  <text x="120" y="40" font-size="12" font-weight="700" fill="#1d4ed8" text-anchor="middle">INTERFACES &amp; PROTOCOLS</text>
+
+  <g transform="translate(34, 52)">
+    <rect width="173" height="36" rx="8" fill="#f8fafc" stroke="#cbd5e1" stroke-width="1.2"/>
+    <text x="14" y="16" font-size="12" font-weight="700" fill="#0f172a">AG-UI Event Stream</text>
+    <text x="14" y="29" font-size="10" fill="#475569">Ordered Timeline &amp; Replay</text>
+  </g>
+  <g transform="translate(34, 96)">
+    <rect width="173" height="36" rx="8" fill="#f8fafc" stroke="#cbd5e1" stroke-width="1.2"/>
+    <text x="14" y="16" font-size="12" font-weight="700" fill="#0f172a">Bilingual Web UI</text>
+    <text x="14" y="29" font-size="10" fill="#475569">English LTR &amp; Hebrew RTL</text>
+  </g>
+  <g transform="translate(34, 140)">
+    <rect width="173" height="36" rx="8" fill="#f8fafc" stroke="#cbd5e1" stroke-width="1.2"/>
+    <text x="14" y="16" font-size="12" font-weight="700" fill="#0f172a">REST HTTP API</text>
+    <text x="14" y="29" font-size="10" fill="#475569">Python server.py / FastAPI</text>
+  </g>
+  <g transform="translate(34, 184)">
+    <rect width="173" height="36" rx="8" fill="#f8fafc" stroke="#cbd5e1" stroke-width="1.2"/>
+    <text x="14" y="16" font-size="12" font-weight="700" fill="#0f172a">Report Exporters</text>
+    <text x="14" y="29" font-size="10" fill="#475569">Native PDF, DOCX &amp; Markdown</text>
+  </g>
+
+  <!-- Middle-Left: Design & UX -->
+  <rect x="18" y="255" width="205" height="105" rx="16" fill="#ffffff" stroke="#60a5fa" stroke-width="2" filter="url(#shadow)"/>
+  <text x="120" y="279" font-size="12" font-weight="700" fill="#1d4ed8" text-anchor="middle">PROGRESSIVE DISCLOSURE</text>
+  <rect x="34" y="290" width="173" height="26" rx="6" fill="#eff6ff" stroke="#bfdbfe"/>
+  <text x="120" y="307" font-size="11" font-weight="600" fill="#1e3a8a" text-anchor="middle">4 On-Demand Deep Drawers</text>
+  <rect x="34" y="322" width="173" height="26" rx="6" fill="#eff6ff" stroke="#bfdbfe"/>
+  <text x="120" y="339" font-size="11" font-weight="600" fill="#1e3a8a" text-anchor="middle">Zero-Clutter Dark Workspace</text>
+
+  <!-- Bottom-Left: Model Pool & AI Providers -->
+  <rect x="18" y="374" width="205" height="526" rx="16" fill="#ffffff" stroke="#60a5fa" stroke-width="2" filter="url(#shadow)"/>
+  <text x="120" y="398" font-size="12" font-weight="700" fill="#1d4ed8" text-anchor="middle">MODEL POOL &amp; ENDPOINTS</text>
+
+  <g transform="translate(34, 412)">
+    <rect width="173" height="48" rx="8" fill="#eff6ff" stroke="#3b82f6" stroke-width="1.5"/>
+    <text x="14" y="19" font-size="12.5" font-weight="800" fill="#0078d4">Microsoft Foundry</text>
+    <text x="14" y="34" font-size="10" fill="#1e3a8a">Azure AI Services (S0)</text>
+    <text x="14" y="44" font-size="9" fill="#475569">disableLocalAuth + Entra RBAC</text>
+  </g>
+  <g transform="translate(34, 470)">
+    <rect width="173" height="42" rx="8" fill="#f8fafc" stroke="#cbd5e1"/>
+    <text x="14" y="18" font-size="12" font-weight="700" fill="#0f172a">Azure OpenAI SDK</text>
+    <text x="14" y="33" font-size="10" fill="#475569">gpt-5.4-pro / o3-deep-research</text>
+  </g>
+  <g transform="translate(34, 522)">
+    <rect width="173" height="42" rx="8" fill="#f8fafc" stroke="#cbd5e1"/>
+    <text x="14" y="18" font-size="12" font-weight="700" fill="#d97757">Claude (via Foundry)</text>
+    <text x="14" y="33" font-size="10" fill="#475569">Theorem &amp; Literature Synthesis</text>
+  </g>
+  <g transform="translate(34, 574)">
+    <rect width="173" height="42" rx="8" fill="#f8fafc" stroke="#cbd5e1"/>
+    <text x="12" y="18" font-size="11.5" font-weight="700" fill="#2563eb">DeepSeek-R1 / V3</text>
+    <text x="12" y="33" font-size="9.5" fill="#475569">Symbolic &amp; Math Reasoning</text>
+  </g>
+  <g transform="translate(34, 626)">
+    <rect width="173" height="42" rx="8" fill="#f8fafc" stroke="#cbd5e1"/>
+    <text x="12" y="18" font-size="11.5" font-weight="700" fill="#7c3aed">Qwen / Llama Pool</text>
+    <text x="12" y="33" font-size="9.5" fill="#475569">Open-Weight Specialist Pool</text>
+  </g>
+  <g transform="translate(34, 678)">
+    <rect width="173" height="42" rx="8" fill="#f8fafc" stroke="#cbd5e1"/>
+    <text x="12" y="18" font-size="11.5" font-weight="700" fill="#059669">Foundry Web Grounding</text>
+    <text x="12" y="33" font-size="9.5" fill="#475569">Web &amp; DOI Citation Search</text>
+  </g>
+  <g transform="translate(34, 730)">
+    <rect width="173" height="42" rx="8" fill="#f8fafc" stroke="#cbd5e1"/>
+    <text x="12" y="18" font-size="11.5" font-weight="700" fill="#0f172a">vLLM / Ollama Adapter</text>
+    <text x="12" y="33" font-size="9.5" fill="#475569">Optional Self-Hosted Pool</text>
+  </g>
+  <g transform="translate(34, 782)">
+    <rect width="173" height="100" rx="8" fill="#f0fdf4" stroke="#86efac" stroke-width="1.2"/>
+    <text x="12" y="20" font-size="11" font-weight="800" fill="#065f46">Offline Deterministic Mode</text>
+    <text x="12" y="37" font-size="9.5" fill="#1e293b">Built-in domain templates:</text>
+    <text x="14" y="53" font-size="9.2" fill="#334155">• Math (Fermat / Modular)</text>
+    <text x="14" y="67" font-size="9.2" fill="#334155">• Genetics (Alopecia AR/Wnt)</text>
+    <text x="14" y="81" font-size="9.2" fill="#334155">• Neurology (Parkinson's GBA1)</text>
+    <text x="14" y="94" font-size="9.2" fill="#334155">• Zero-key local verification</text>
+  </g>
+
+  <!-- ===================================================================== -->
+  <!-- CENTER CORE ENGINE: RESEARCHWEAVE ENGINE (AGENT SERVICE + BRAIN)       -->
+  <!-- ===================================================================== -->
+  <rect x="245" y="318" width="945" height="582" rx="18" fill="url(#coreBg)" stroke="#334155" stroke-width="2" filter="url(#shadow)"/>
+
+  <!-- Core Header Title -->
+  <g transform="translate(268, 332)">
+    <rect x="0" y="4" width="38" height="38" rx="10" fill="#0078d4"/>
+    <text x="19" y="29" font-size="18" font-weight="900" fill="#ffffff" text-anchor="middle">RW</text>
+    <text x="50" y="28" font-size="23" font-weight="800" fill="#0f172a">ResearchWeave Core Engine</text>
+    <rect x="415" y="9" width="88" height="24" rx="6" fill="#1e293b"/>
+    <text x="459" y="25" font-size="11" font-weight="700" fill="#38bdf8" text-anchor="middle">Python 3.11+</text>
+    <rect x="511" y="9" width="92" height="24" rx="6" fill="#0078d4"/>
+    <text x="557" y="25" font-size="11" font-weight="700" fill="#ffffff" text-anchor="middle">Azure Native</text>
+    <rect x="611" y="9" width="106" height="24" rx="6" fill="#059669"/>
+    <text x="664" y="25" font-size="11" font-weight="700" fill="#ffffff" text-anchor="middle">Apache-2.0 OSS</text>
+  </g>
+
+  <!-- 1. Top Bar inside Core: Research Service & Durable Coordinator -->
+  <rect x="265" y="384" width="905" height="118" rx="14" fill="url(#moduleBg)" stroke="#1e293b" stroke-width="1.4"/>
+  <text x="717" y="405" font-size="13.5" font-weight="800" fill="#0f172a" text-anchor="middle">Research Service &amp; Durable Coordinator (coordinator.py + Temporal Orchestration Pattern)</text>
+
+  <!-- 6 Service Pills (2x3 grid) -->
+  <rect x="285" y="416" width="275" height="32" rx="7" fill="#f8fafc" stroke="#475569" stroke-width="1.2"/>
+  <text x="422" y="436" font-size="12" font-weight="600" fill="#0f172a" text-anchor="middle">Background Task &amp; DAG Execution</text>
+
+  <rect x="580" y="416" width="275" height="32" rx="7" fill="#f8fafc" stroke="#475569" stroke-width="1.2"/>
+  <text x="717" y="436" font-size="12" font-weight="600" fill="#0f172a" text-anchor="middle">Investigation &amp; Objective Revisions</text>
+
+  <rect x="875" y="416" width="275" height="32" rx="7" fill="#f8fafc" stroke="#475569" stroke-width="1.2"/>
+  <text x="1012" y="436" font-size="12" font-weight="600" fill="#0f172a" text-anchor="middle">Approved-User ACL &amp; Active-Run Lock</text>
+
+  <rect x="285" y="456" width="275" height="32" rx="7" fill="#f8fafc" stroke="#475569" stroke-width="1.2"/>
+  <text x="422" y="476" font-size="12" font-weight="600" fill="#0f172a" text-anchor="middle">Stopping Conditions (Hours / Budget)</text>
+
+  <rect x="580" y="456" width="275" height="32" rx="7" fill="#f8fafc" stroke="#475569" stroke-width="1.2"/>
+  <text x="717" y="476" font-size="12" font-weight="600" fill="#0f172a" text-anchor="middle">Storage &amp; Company Brain Manager</text>
+
+  <rect x="875" y="456" width="275" height="32" rx="7" fill="#f8fafc" stroke="#475569" stroke-width="1.2"/>
+  <text x="1012" y="476" font-size="12" font-weight="600" fill="#0f172a" text-anchor="middle">Per-Investigation Container Pool</text>
+
+  <!-- 2. Middle Row inside Core: Event System | Dynamic Agent Engine | Isolated Workspace -->
+  <!-- Left: Event & Steering System -->
+  <rect x="265" y="522" width="190" height="210" rx="14" fill="url(#moduleBg)" stroke="#1e293b" stroke-width="1.4"/>
+  <text x="360" y="544" font-size="13" font-weight="800" fill="#0f172a" text-anchor="middle">Event &amp; Steering</text>
+
+  <rect x="280" y="558" width="160" height="34" rx="7" fill="#f8fafc" stroke="#475569" stroke-width="1.2"/>
+  <text x="360" y="579" font-size="11.5" font-weight="600" fill="#0f172a" text-anchor="middle">Message &amp; Timeline Log</text>
+
+  <rect x="280" y="602" width="160" height="34" rx="7" fill="#f8fafc" stroke="#475569" stroke-width="1.2"/>
+  <text x="360" y="623" font-size="11.5" font-weight="600" fill="#0f172a" text-anchor="middle">Non-Blocking Steering</text>
+
+  <rect x="280" y="646" width="160" height="34" rx="7" fill="#f8fafc" stroke="#475569" stroke-width="1.2"/>
+  <text x="360" y="667" font-size="11.5" font-weight="600" fill="#0f172a" text-anchor="middle">Human Approval Gate</text>
+
+  <rect x="280" y="690" width="160" height="30" rx="7" fill="#f8fafc" stroke="#475569" stroke-width="1.2"/>
+  <text x="360" y="709" font-size="11" font-weight="600" fill="#0f172a" text-anchor="middle">Clarification Gate</text>
+
+  <!-- Center: Dynamic Specialist Agent Engine -->
+  <rect x="475" y="522" width="490" height="210" rx="14" fill="url(#moduleBg)" stroke="#1e293b" stroke-width="1.4"/>
+  <text x="720" y="544" font-size="13.5" font-weight="800" fill="#0f172a" text-anchor="middle">Dynamic Multi-Agent Engine (AgentScope 2.0 / OpenScientist Loop)</text>
+
+  <!-- Inner boxes of Agent Engine -->
+  <rect x="495" y="562" width="145" height="42" rx="7" fill="#f8fafc" stroke="#475569" stroke-width="1.2"/>
+  <text x="567" y="581" font-size="11.5" font-weight="700" fill="#0f172a" text-anchor="middle">Lead Coordinator</text>
+  <text x="567" y="596" font-size="9.5" fill="#475569" text-anchor="middle">Decomposes &amp; Steers</text>
+
+  <rect x="495" y="656" width="145" height="46" rx="7" fill="#f8fafc" stroke="#475569" stroke-width="1.2"/>
+  <text x="567" y="675" font-size="11.5" font-weight="700" fill="#0f172a" text-anchor="middle">Specialist Workers</text>
+  <text x="567" y="690" font-size="9.5" fill="#475569" text-anchor="middle">Lit / Compute / Hypothesis</text>
+
+  <rect x="668" y="608" width="142" height="44" rx="7" fill="#f8fafc" stroke="#475569" stroke-width="1.2"/>
+  <text x="739" y="627" font-size="11.5" font-weight="700" fill="#0f172a" text-anchor="middle">Epistemic Reviewer</text>
+  <text x="739" y="642" font-size="9.5" fill="#059669" text-anchor="middle">Audits Claims &amp; Code</text>
+
+  <rect x="832" y="608" width="115" height="44" rx="7" fill="#f8fafc" stroke="#475569" stroke-width="1.2"/>
+  <text x="889" y="627" font-size="11.5" font-weight="700" fill="#0f172a" text-anchor="middle">Research Toolkit</text>
+  <text x="889" y="642" font-size="9.5" fill="#475569" text-anchor="middle">Brain + Sandbox</text>
+
+  <!-- Internal Loop Arrows inside Agent Engine -->
+  <path d="M 567 604 L 567 652" stroke="#1e293b" stroke-width="1.6" fill="none" marker-end="url(#arrow)"/>
+  <path d="M 640 583 Q 739 583 739 605" stroke="#1e293b" stroke-width="1.6" fill="none" marker-end="url(#arrow)"/>
+  <path d="M 739 652 Q 739 679 643 679" stroke="#1e293b" stroke-width="1.6" fill="none" marker-end="url(#arrow)"/>
+  <path d="M 832 630 L 813 630" stroke="#1e293b" stroke-width="1.6" fill="none" marker-end="url(#arrow)"/>
+
+  <!-- Right: Workspace & Sandbox -->
+  <rect x="985" y="522" width="185" height="210" rx="14" fill="url(#moduleBg)" stroke="#1e293b" stroke-width="1.4"/>
+  <text x="1077" y="544" font-size="13" font-weight="800" fill="#0f172a" text-anchor="middle">Sandbox &amp; Artifacts</text>
+
+  <rect x="1000" y="558" width="155" height="34" rx="7" fill="#f8fafc" stroke="#475569" stroke-width="1.2"/>
+  <text x="1077" y="579" font-size="11.5" font-weight="600" fill="#0f172a" text-anchor="middle">AST Safety Guardrails</text>
+
+  <rect x="1000" y="602" width="155" height="34" rx="7" fill="#f8fafc" stroke="#475569" stroke-width="1.2"/>
+  <text x="1077" y="623" font-size="11.5" font-weight="600" fill="#0f172a" text-anchor="middle">Isolated Python Subproc</text>
+
+  <rect x="1000" y="646" width="155" height="34" rx="7" fill="#f8fafc" stroke="#475569" stroke-width="1.2"/>
+  <text x="1077" y="667" font-size="11.5" font-weight="600" fill="#0f172a" text-anchor="middle">Azure ACA Sandboxes</text>
+
+  <rect x="1000" y="690" width="155" height="30" rx="7" fill="#f8fafc" stroke="#475569" stroke-width="1.2"/>
+  <text x="1077" y="709" font-size="11" font-weight="600" fill="#0f172a" text-anchor="middle">Per-Run Blob Store</text>
+
+  <!-- 3. Bottom Row inside Core: Model Router | Company Brain Graph | Report & Guardrail Middleware -->
+  <!-- Bottom-Left: Model Pool Router -->
+  <rect x="265" y="752" width="275" height="130" rx="14" fill="url(#moduleBg)" stroke="#1e293b" stroke-width="1.4"/>
+  <text x="402" y="774" font-size="13" font-weight="800" fill="#0f172a" text-anchor="middle">Model Pool Router</text>
+
+  <rect x="280" y="788" width="130" height="76" rx="8" fill="#f8fafc" stroke="#475569" stroke-width="1.2"/>
+  <text x="345" y="815" font-size="11.5" font-weight="700" fill="#0f172a" text-anchor="middle">Foundry / OpenAI</text>
+  <text x="345" y="833" font-size="10.5" fill="#475569" text-anchor="middle">Per-Agent Pool</text>
+  <text x="345" y="849" font-size="10" fill="#0284c7" text-anchor="middle">Live Pool Edits</text>
+
+  <rect x="420" y="788" width="105" height="34" rx="7" fill="#f8fafc" stroke="#475569" stroke-width="1.2"/>
+  <text x="472" y="809" font-size="11" font-weight="600" fill="#0f172a" text-anchor="middle">Retry &amp; Quota</text>
+
+  <rect x="420" y="830" width="105" height="34" rx="7" fill="#f8fafc" stroke="#475569" stroke-width="1.2"/>
+  <text x="472" y="851" font-size="11" font-weight="600" fill="#0f172a" text-anchor="middle">Local Fallback</text>
+
+  <!-- Bottom-Center: Company Brain Engine (brain.py) -->
+  <rect x="565" y="752" width="295" height="130" rx="14" fill="url(#moduleBg)" stroke="#1e293b" stroke-width="1.4"/>
+  <text x="712" y="774" font-size="13" font-weight="800" fill="#0f172a" text-anchor="middle">Company Brain Engine (brain.py)</text>
+
+  <rect x="582" y="788" width="260" height="34" rx="7" fill="#f8fafc" stroke="#475569" stroke-width="1.2"/>
+  <text x="712" y="809" font-size="11.5" font-weight="600" fill="#0f172a" text-anchor="middle">Ontology Entities, Typed Edges &amp; Claims</text>
+
+  <rect x="582" y="830" width="260" height="34" rx="7" fill="#f8fafc" stroke="#475569" stroke-width="1.2"/>
+  <text x="712" y="851" font-size="11.5" font-weight="600" fill="#0f172a" text-anchor="middle">Scoped Cross-Run Retrieval &amp; Deletion</text>
+
+  <!-- Bottom-Right: Guardrails & Report Synthesis (reports.py / sandbox.py) -->
+  <rect x="885" y="752" width="285" height="130" rx="14" fill="url(#moduleBg)" stroke="#1e293b" stroke-width="1.4"/>
+  <text x="1027" y="774" font-size="13" font-weight="800" fill="#0f172a" text-anchor="middle">Guardrails &amp; Report Middleware</text>
+
+  <rect x="900" y="788" width="122" height="34" rx="7" fill="#f8fafc" stroke="#475569" stroke-width="1.2"/>
+  <text x="961" y="809" font-size="11" font-weight="600" fill="#0f172a" text-anchor="middle">Safety Filter</text>
+
+  <rect x="1032" y="788" width="122" height="34" rx="7" fill="#f8fafc" stroke="#475569" stroke-width="1.2"/>
+  <text x="1093" y="809" font-size="11" font-weight="600" fill="#0f172a" text-anchor="middle">PROV-O Citations</text>
+
+  <rect x="900" y="830" width="122" height="34" rx="7" fill="#f8fafc" stroke="#475569" stroke-width="1.2"/>
+  <text x="961" y="851" font-size="11" font-weight="600" fill="#0f172a" text-anchor="middle">PDF / DOCX Gen</text>
+
+  <rect x="1032" y="830" width="122" height="34" rx="7" fill="#f8fafc" stroke="#475569" stroke-width="1.2"/>
+  <text x="1093" y="851" font-size="11" font-weight="600" fill="#0f172a" text-anchor="middle">Domain Prompts</text>
+
+  <!-- Internal Connectors between Core Sub-Modules -->
+  <path d="M 360 502 L 360 520" stroke="#1e293b" stroke-width="1.6" fill="none" marker-start="url(#arrow)" marker-end="url(#arrow)"/>
+  <path d="M 1077 502 L 1077 520" stroke="#1e293b" stroke-width="1.6" fill="none" marker-end="url(#arrow)"/>
+  <path d="M 455 625 L 473 625" stroke="#1e293b" stroke-width="1.6" fill="none" marker-start="url(#arrow)" marker-end="url(#arrow)"/>
+  <path d="M 965 625 L 983 625" stroke="#1e293b" stroke-width="1.6" fill="none" marker-start="url(#arrow)" marker-end="url(#arrow)"/>
+  <path d="M 450 752 L 505 734" stroke="#1e293b" stroke-width="1.6" fill="none" marker-end="url(#arrow)"/>
+  <path d="M 712 752 L 712 734" stroke="#1e293b" stroke-width="1.6" fill="none" marker-end="url(#arrow)"/>
+  <path d="M 960 752 L 915 734" stroke="#1e293b" stroke-width="1.6" fill="none" marker-end="url(#arrow)"/>
+
+  <!-- ===================================================================== -->
+  <!-- RIGHT SIDEBAR: OPEN-SOURCE ECOSYSTEM & REUSED BUILDING BLOCKS          -->
+  <!-- ===================================================================== -->
+  <rect x="1210" y="318" width="210" height="582" rx="16" fill="#ffffff" stroke="#334155" stroke-width="2" filter="url(#shadow)"/>
+  <text x="1315" y="344" font-size="12" font-weight="800" fill="#0f172a" text-anchor="middle">OPEN-SOURCE STACK</text>
+  <text x="1315" y="360" font-size="10" fill="#475569" text-anchor="middle">Active &amp; Architecture Baseline</text>
+
+  <!-- OSS Item 1: Python + Pydantic + Azure SDK -->
+  <g transform="translate(1226, 374)">
+    <rect width="178" height="68" rx="10" fill="#f0fdf4" stroke="#22c55e" stroke-width="1.4"/>
+    <text x="14" y="19" font-size="12" font-weight="800" fill="#14532d">Pydantic v2 + Stdlib</text>
+    <text x="14" y="35" font-size="10" fill="#166534">Active in pyproject.toml:</text>
+    <text x="14" y="49" font-size="9.5" fill="#334155">• pydantic, openai SDK</text>
+    <text x="14" y="61" font-size="9.5" fill="#334155">• azure-identity, storage-blob</text>
+  </g>
+
+  <!-- OSS Item 2: OpenScientist -->
+  <g transform="translate(1226, 454)">
+    <rect width="178" height="64" rx="10" fill="#eff6ff" stroke="#60a5fa" stroke-width="1.2"/>
+    <text x="14" y="19" font-size="12" font-weight="800" fill="#1e3a8a">OpenScientist</text>
+    <text x="14" y="34" font-size="10" font-weight="600" fill="#0284c7">Apache-2.0 Research App</text>
+    <text x="14" y="49" font-size="9.5" fill="#475569">Iterative discovery loop,</text>
+    <text x="14" y="60" font-size="9.5" fill="#475569">state &amp; report patterns</text>
+  </g>
+
+  <!-- OSS Item 3: AgentScope 2.0 -->
+  <g transform="translate(1226, 530)">
+    <rect width="178" height="64" rx="10" fill="#eff6ff" stroke="#60a5fa" stroke-width="1.2"/>
+    <text x="14" y="19" font-size="12" font-weight="800" fill="#1e3a8a">AgentScope 2.0</text>
+    <text x="14" y="34" font-size="10" font-weight="600" fill="#0284c7">Apache-2.0 Agent Teams</text>
+    <text x="14" y="49" font-size="9.5" fill="#475569">Runtime specialist creation</text>
+    <text x="14" y="60" font-size="9.5" fill="#475569">(vs. LangGraph MIT)</text>
+  </g>
+
+  <!-- OSS Item 4: Temporal -->
+  <g transform="translate(1226, 606)">
+    <rect width="178" height="64" rx="10" fill="#eff6ff" stroke="#60a5fa" stroke-width="1.2"/>
+    <text x="14" y="19" font-size="12" font-weight="800" fill="#1e3a8a">Temporal.io</text>
+    <text x="14" y="34" font-size="10" font-weight="600" fill="#0284c7">MIT Durable Orchestration</text>
+    <text x="14" y="49" font-size="9.5" fill="#475569">48h–10d durable runs,</text>
+    <text x="14" y="60" font-size="9.5" fill="#475569">signals &amp; activity retries</text>
+  </g>
+
+  <!-- OSS Item 5: TrustGraph / LightRAG -->
+  <g transform="translate(1226, 682)">
+    <rect width="178" height="64" rx="10" fill="#eff6ff" stroke="#60a5fa" stroke-width="1.2"/>
+    <text x="14" y="19" font-size="12" font-weight="800" fill="#1e3a8a">TrustGraph / LightRAG</text>
+    <text x="14" y="34" font-size="10" font-weight="600" fill="#0284c7">Apache-2.0 / MIT Brain</text>
+    <text x="14" y="49" font-size="9.5" fill="#475569">Ontology graph extraction</text>
+    <text x="14" y="60" font-size="9.5" fill="#475569">&amp; PROV-O claim lineage</text>
+  </g>
+
+  <!-- OSS Item 6: Docling -->
+  <g transform="translate(1226, 758)">
+    <rect width="178" height="60" rx="10" fill="#eff6ff" stroke="#60a5fa" stroke-width="1.2"/>
+    <text x="14" y="19" font-size="12" font-weight="800" fill="#1e3a8a">Docling + FastAPI</text>
+    <text x="14" y="34" font-size="10" font-weight="600" fill="#0284c7">MIT Document &amp; API Stack</text>
+    <text x="14" y="49" font-size="9.5" fill="#475569">PDF/table locator extraction</text>
+  </g>
+
+  <!-- OSS Item 7: Agent Zero / OpenHands -->
+  <g transform="translate(1226, 830)">
+    <rect width="178" height="54" rx="10" fill="#f8fafc" stroke="#cbd5e1" stroke-width="1.2"/>
+    <text x="14" y="19" font-size="11.5" font-weight="700" fill="#334155">OpenHands / Agent Zero</text>
+    <text x="14" y="34" font-size="9.5" fill="#64748b">Evaluated Sandbox &amp; UI</text>
+    <text x="14" y="46" font-size="9.5" fill="#64748b">Comparison Baselines</text>
+  </g>
+
+  <!-- ===================================================================== -->
+  <!-- BOTTOM ROW: MICROSOFT AZURE INFRASTRUCTURE (infra/main.bicep)          -->
+  <!-- ===================================================================== -->
+  <!-- Bottom Box 1: Azure Compute, Identity & IaC -->
+  <rect x="245" y="914" width="460" height="108" rx="16" fill="#ffffff" stroke="#0078d4" stroke-width="2" filter="url(#shadow)"/>
+  <text x="268" y="936" font-size="12" font-weight="800" fill="#0078d4" letter-spacing="0.5">AZURE HOSTING &amp; IDENTITY (PROVISIONED BY infra/main.bicep)</text>
+
+  <g transform="translate(265, 946)">
+    <rect width="205" height="62" rx="8" fill="#eff6ff" stroke="#93c5fd" stroke-width="1.2"/>
+    <text x="12" y="18" font-size="12" font-weight="800" fill="#0f172a">Azure Container Apps</text>
+    <text x="12" y="33" font-size="10" fill="#334155">Managed Env + Auto-Scale (1–5)</text>
+    <text x="12" y="47" font-size="9.5" fill="#0284c7">+ ACA Dynamic Sandboxes / Batch</text>
+  </g>
+
+  <g transform="translate(482, 946)">
+    <rect width="205" height="62" rx="8" fill="#eff6ff" stroke="#93c5fd" stroke-width="1.2"/>
+    <text x="12" y="18" font-size="12" font-weight="800" fill="#0f172a">Managed Identity &amp; RBAC</text>
+    <text x="12" y="33" font-size="10" fill="#334155">User-Assigned Identity (Zero Keys)</text>
+    <text x="12" y="47" font-size="9.5" fill="#059669">Blob Contributor + OpenAI User</text>
+  </g>
+
+  <!-- Bottom Box 2: Azure Observability & Telemetry -->
+  <rect x="720" y="914" width="470" height="108" rx="16" fill="#ffffff" stroke="#0078d4" stroke-width="2" filter="url(#shadow)"/>
+  <text x="742" y="936" font-size="12" font-weight="800" fill="#0078d4" letter-spacing="0.5">AZURE OBSERVABILITY &amp; TELEMETRY (infra/main.bicep)</text>
+
+  <g transform="translate(738, 946)">
+    <rect width="140" height="62" rx="8" fill="#f8fafc" stroke="#cbd5e1" stroke-width="1.2"/>
+    <text x="12" y="18" font-size="12" font-weight="800" fill="#0f172a">Log Analytics</text>
+    <text x="12" y="33" font-size="10" fill="#475569">PerGB2018 Workspace</text>
+    <text x="12" y="47" font-size="9.5" fill="#64748b">30-Day Container Logs</text>
+  </g>
+
+  <g transform="translate(888, 946)">
+    <rect width="145" height="62" rx="8" fill="#f8fafc" stroke="#cbd5e1" stroke-width="1.2"/>
+    <text x="12" y="18" font-size="12" font-weight="800" fill="#0f172a">App Insights</text>
+    <text x="12" y="33" font-size="10" fill="#475559">APM &amp; Request Traces</text>
+    <text x="12" y="47" font-size="9.5" fill="#64748b">Connection String Env</text>
+  </g>
+
+  <g transform="translate(1043, 946)">
+    <rect width="130" height="62" rx="8" fill="#f8fafc" stroke="#cbd5e1" stroke-width="1.2"/>
+    <text x="12" y="18" font-size="12" font-weight="800" fill="#0f172a">OpenTelemetry</text>
+    <text x="12" y="33" font-size="10" fill="#475569">OSS Trace Standard</text>
+    <text x="12" y="47" font-size="9.5" fill="#64748b">Agent &amp; Run Metrics</text>
+  </g>
+
+  <!-- Bottom Box 3: Packaging & Deployment -->
+  <rect x="1210" y="914" width="210" height="108" rx="16" fill="#ffffff" stroke="#0078d4" stroke-width="2" filter="url(#shadow)"/>
+  <text x="1315" y="936" font-size="12" font-weight="800" fill="#0078d4" text-anchor="middle">DEPLOYMENT &amp; RUNTIME</text>
+
+  <g transform="translate(1226, 946)">
+    <rect width="178" height="62" rx="8" fill="#f8fafc" stroke="#cbd5e1" stroke-width="1.2"/>
+    <text x="12" y="18" font-size="12" font-weight="800" fill="#0f172a">Docker + Bicep / ARM</text>
+    <text x="12" y="33" font-size="10" fill="#475569">One-Click Deploy to Azure</text>
+    <text x="12" y="47" font-size="9.5" fill="#0284c7">infra/azuredeploy.json</text>
+  </g>
+
+  <!-- ===================================================================== -->
+  <!-- DASHED CONNECTOR LINES (MATCHING REFERENCE ARCHITECTURE DIAGRAM)       -->
+  <!-- ===================================================================== -->
+  <!-- Top Storage <-> Core Service -->
+  <path d="M 245 80 L 233 80 L 233 442 L 265 442" stroke="#334155" stroke-width="1.6" stroke-dasharray="5,4" fill="none"/>
+  <!-- Left Interfaces <-> Core Event System -->
+  <path d="M 223 128 L 233 128 L 233 610 L 265 610" stroke="#334155" stroke-width="1.6" stroke-dasharray="5,4" fill="none"/>
+  <!-- Left Model Pool <-> Core Model Router -->
+  <path d="M 223 560 L 233 560 L 233 815 L 265 815" stroke="#334155" stroke-width="1.6" stroke-dasharray="5,4" fill="none"/>
+  <!-- Core Workspace <-> Right Open Source & Bottom Deployment -->
+  <path d="M 1170 625 L 1210 625" stroke="#334155" stroke-width="1.6" stroke-dasharray="5,4" fill="none"/>
+  <path d="M 1170 665 L 1196 665 L 1196 968 L 1210 968" stroke="#334155" stroke-width="1.6" stroke-dasharray="5,4" fill="none"/>
+  <!-- Core Middleware <-> Bottom Azure Boxes -->
+  <path d="M 712 882 L 712 900 L 475 900 L 475 914" stroke="#334155" stroke-width="1.6" stroke-dasharray="5,4" fill="none"/>
+  <path d="M 950 882 L 950 914" stroke="#334155" stroke-width="1.6" stroke-dasharray="5,4" fill="none"/>
+</svg>

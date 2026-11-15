@@ -187,8 +187,11 @@ def build_live_report_markdown(
                     else f"**Isolated Sandbox Output:** `{t.get('code_output') or 'none'}`",
                 ]
             )
-        elif t.get("kind") == "literature_analysis" and t.get("result_summary"):
-            lines.append(t["result_summary"])
+        elif t.get("result_summary"):
+            summary_text = t["result_summary"]
+            if t.get("kind") in ("hypothesis_test", "independent_review") and len(summary_text) > 420:
+                summary_text = summary_text[:420].rstrip() + "... *(הניתוח המלא מוצג בסעיף 2 לעיל)*" if is_he else summary_text[:420].rstrip() + "... *(Full analysis in Section 2 above)*"
+            lines.append(summary_text)
         lines.append("")
 
     if brain_paths:

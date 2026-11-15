@@ -39,7 +39,7 @@ class FoundryAgentScopeChatModel(ChatModelBase):  # type: ignore[misc]
     """Adapter bridging ResearchWeave's FoundryModelAdapter into AgentScope 2.0's ChatModelBase."""
 
     class Parameters(BaseModel):
-        max_tokens: int = 3500
+        max_tokens: int = 8000
 
     def __init__(self, foundry_adapter: Any, model_name: str, fallback_text: str = "") -> None:
         if AGENTSCOPE_AVAILABLE:
@@ -56,6 +56,7 @@ class FoundryAgentScopeChatModel(ChatModelBase):  # type: ignore[misc]
         self.foundry_adapter = foundry_adapter
         self.fallback_text = fallback_text
         self.last_used_deployment = model_name
+        self.last_live_succeeded: bool = False
         self.last_usage: dict[str, Any] = {
             "input_tokens": 0,
             "output_tokens": 0,
@@ -96,7 +97,7 @@ class FoundryAgentScopeChatModel(ChatModelBase):  # type: ignore[misc]
                 target_model,
                 system_prompt=system_prompt,
                 user_prompt=user_prompt,
-                max_tokens=kwargs.get("max_tokens", 3500),
+                max_tokens=kwargs.get("max_tokens", 8000),
             )
             self.last_usage = usage_meta
         else:
@@ -104,7 +105,7 @@ class FoundryAgentScopeChatModel(ChatModelBase):  # type: ignore[misc]
                 target_model,
                 system_prompt=system_prompt,
                 user_prompt=user_prompt,
-                max_tokens=kwargs.get("max_tokens", 3500),
+                max_tokens=kwargs.get("max_tokens", 8000),
             )
             in_tok = max(1, (len(system_prompt) + len(user_prompt)) // 4)
             out_tok = max(1, len(live_text or self.fallback_text) // 4)
@@ -115,7 +116,8 @@ class FoundryAgentScopeChatModel(ChatModelBase):  # type: ignore[misc]
                 "duration_seconds": 0.1,
             }
         self.last_used_deployment = used_dep
-        final_text = live_text or self.fallback_text or f"Completed analysis using {used_dep}."
+        self.last_live_succeeded = bool(live_text and live_text.strip())
+        final_text = live_text or self.fallback_text or ""
 
         if AGENTSCOPE_AVAILABLE:
             return ChatResponse(
@@ -196,6 +198,7 @@ class AgentScopeTeamRuntime:
         ag, chat_model = self._live_agents[agent_id]
         chat_model.model_name = assigned_model
         chat_model.fallback_text = fallback_text
+        ag.system_prompt = system_prompt
 
         if AGENTSCOPE_AVAILABLE and ag is not None:
             try:
@@ -214,12 +217,13 @@ class AgentScopeTeamRuntime:
                     import concurrent.futures
 
                     with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
-                        out_text = pool.submit(lambda: asyncio.run(_invoke())).result(timeout=65.0)
+                        out_text = pool.submit(lambda: asyncio.run(_invoke())).result(timeout=75.0)
                 else:
                     out_text = asyncio.run(_invoke())
 
-                used_live = bool(out_text and out_text != fallback_text)
-                return out_text, chat_model.last_used_deployment, used_live, dict(chat_model.last_usage)
+                used_live = bool(chat_model.last_live_succeeded and out_text and out_text != fallback_text)
+                if used_live:
+                    return out_text, chat_model.last_used_deployment, True, dict(chat_model.last_usage)
             except Exception:
                 pass
 

@@ -111,7 +111,7 @@ class FoundryModelAdapter:
         requested_model: str,
         system_prompt: str,
         user_prompt: str,
-        max_tokens: int = 3500,
+        max_tokens: int = 8000,
     ) -> tuple[str | None, str, dict[str, Any]]:
         """Invoke the Foundry model pool and return `(text, deployment, usage_meta)`."""
         t0 = time.monotonic()
@@ -170,7 +170,7 @@ class FoundryModelAdapter:
         requested_model: str,
         system_prompt: str,
         user_prompt: str,
-        max_tokens: int = 3500,
+        max_tokens: int = 8000,
     ) -> tuple[str | None, str]:
         text, dep, _ = self.complete_with_usage(
             requested_model=requested_model,
@@ -918,8 +918,11 @@ class ResearchCoordinator:
             name="Lead-Research-Coordinator",
             system_prompt=(
                 "You are the Lead Research Coordinator in ResearchWeave. "
-                "Decompose the user's research objective into 3 distinct, specific English scientific search queries "
-                "suitable for ArXiv / PubMed retrieval (covering distinct sub-mechanisms, observations, or theoretical models). "
+                "Decompose the user's research objective into 3 distinct, non-overlapping English scientific search queries "
+                "for ArXiv / PubMed. Each query MUST contain 2-4 focused keywords for ONE distinct sub-topic "
+                "(e.g., if the objective mentions both JWST and DESI, Query 1 must focus ONLY on JWST high-z galaxies, "
+                "Query 2 must focus ONLY on DESI BAO dark energy w0 wa, and Query 3 on the theoretical model). "
+                "Never combine two different surveys/telescopes in the same query string. "
                 'Respond ONLY with valid JSON: {"queries": ["query 1", "query 2", "query 3"]}'
             ),
             assigned_model=lead_model,
@@ -1373,37 +1376,47 @@ class ResearchCoordinator:
             f"- [{s['id']}] {s['title']}: {s.get('excerpt', '')}" for s in uploaded_sources
         )
 
-        # Live Lead-Research-Coordinator Query Decomposition + OpenScientist Literature Search (PubMed / ArXiv)
-        retrieved_paper_ids: list[str] = []
+        # Live Lead-Research-Coordinator Query Decomposition + Parallel OpenScientist Literature Search (PubMed / ArXiv)
         if self.foundry.is_configured:
+            import concurrent.futures
+
             search_queries = self._plan_search_queries_with_lead_agent(inv, domain)
-            seen_uris: set[str] = set()
-            for sq in search_queries[:3]:
-                live_papers = (
-                    search_arxiv_live(sq, max_results=2)
-                    if domain in ("mathematics_fermat", "mathematics", "engineering", "cosmology_astrophysics", "general_science")
-                    else search_pubmed_live(sq, max_results=2)
-                )
-                for p in live_papers:
-                    p_uri = p.get("uri") or ""
-                    if p_uri in seen_uris:
-                        continue
-                    seen_uris.add(p_uri)
-                    added_paper = self.store.add_source(
-                        SourceRecord(
-                            investigation_id=inv_id,
-                            title=f"[{p.get('source_db', 'lit').upper()} {p.get('pmid')}] {p.get('title')}",
-                            source_type="scientific_paper",
-                            uri_or_path=p_uri or "https://arxiv.org/",
-                            blob_container=inv["blob_container"],
-                            content_hash=hashlib.sha256(
-                                f"{p.get('pmid')}:{p.get('title')}".encode("utf-8")
-                            ).hexdigest(),
-                            excerpt=p.get("abstract", "")[:600],
-                            metadata={"pmid": p.get("pmid"), "source_db": p.get("source_db"), "query": sq},
+            use_arxiv = domain in (
+                "mathematics_fermat",
+                "mathematics",
+                "engineering",
+                "cosmology_astrophysics",
+                "general_science",
+            )
+            search_fn = search_arxiv_live if use_arxiv else search_pubmed_live
+
+            with concurrent.futures.ThreadPoolExecutor(max_workers=3) as pool:
+                futures = [(sq, pool.submit(search_fn, sq, 2)) for sq in search_queries[:3]]
+                seen_uris: set[str] = set()
+                for sq, fut in futures:
+                    try:
+                        live_papers = fut.result(timeout=8.0)
+                    except Exception:
+                        live_papers = []
+                    for p in live_papers:
+                        p_uri = p.get("uri") or ""
+                        if p_uri in seen_uris:
+                            continue
+                        seen_uris.add(p_uri)
+                        self.store.add_source(
+                            SourceRecord(
+                                investigation_id=inv_id,
+                                title=f"[{p.get('source_db', 'lit').upper()} {p.get('pmid')}] {p.get('title')}",
+                                source_type="scientific_paper",
+                                uri_or_path=p_uri or "https://arxiv.org/",
+                                blob_container=inv["blob_container"],
+                                content_hash=hashlib.sha256(
+                                    f"{p.get('pmid')}:{p.get('title')}".encode("utf-8")
+                                ).hexdigest(),
+                                excerpt=p.get("abstract", "")[:600],
+                                metadata={"pmid": p.get("pmid"), "source_db": p.get("source_db"), "query": sq},
+                            )
                         )
-                    )
-                    retrieved_paper_ids.append(added_paper.id)
 
         all_lit_sources = self.store.list_sources(inv_id)
         if not all_lit_sources:
@@ -1469,14 +1482,23 @@ class ResearchCoordinator:
         elif domain not in ("mathematics_fermat", "genetics", "neurology") and not (
             domain == "mathematics" and any(k in inv["objective"].lower() for k in ("פאי", "pi", "3.14", "מעגל"))
         ):
+            is_he = inv.get("report_language", "en").lower().startswith("he") or any(
+                "\u0590" <= ch <= "\u05ff" for ch in inv.get("objective", "")
+            )
+            titles_summary = "; ".join(s["title"][:90] for s in all_lit_sources[:4])
+            fallback_obs = (
+                f"נסקרו ואומתו {len(all_lit_sources)} מקורות מדעיים עבור '{inv['title']}': {titles_summary}."
+                if is_he
+                else f"Reviewed and indexed {len(all_lit_sources)} scientific sources for '{inv['title']}': {titles_summary}."
+            )
             self.store.upsert_claim(
                 ClaimRecord(
                     investigation_id=inv_id,
-                    statement=f"Baseline literature and uploaded evidence establish coupled regime constraints for '{inv['title']}'.",
+                    statement=fallback_obs,
                     category="observation",
                     verification_state=VerificationState.OBSERVED,
                     confidence=0.85,
-                    supporting_source_ids=[s["id"] for s in all_lit_sources[:2]],
+                    supporting_source_ids=[s["id"] for s in all_lit_sources[:3]],
                     objective_revision=rev_num,
                 )
             )
@@ -1695,9 +1717,16 @@ class ResearchCoordinator:
             statement = live_text if not baseline_statement else f"{baseline_statement}\n\n{live_text}"
             task.assigned_model = used_dep
         else:
+            is_he = inv.get("report_language", "en").lower().startswith("he") or any(
+                "\u0590" <= ch <= "\u05ff" for ch in inv.get("objective", "")
+            )
             statement = (
                 baseline_statement
-                or f"Synthesized Hypothesis for '{inv['title']}': Multi-hop graph traversal across the Company Brain indicates that coupling boundary-layer stabilization with adaptive feedback control mitigates degradation under peak stress regimes."
+                or (
+                    f"השערת מחקר לבדיקה עבור '{inv['title']}': הצלבת הממצאים החישוביים והספרותיים עבור {inv['objective'][:140]} דורשת אימות מול נתוני תצפית/מעבדה בלתי תלויים."
+                    if is_he
+                    else f"Testable Research Hypothesis for '{inv['title']}': Cross-referencing computational and literature evidence for {inv['objective'][:140]} requires independent empirical falsification tests."
+                )
             )
 
         self.store.upsert_claim(
@@ -1797,8 +1826,9 @@ class ResearchCoordinator:
                     clm.reviewer_notes = f"[{used_dep} Epistemic Audit]: {live_audit}"
                 else:
                     clm.reviewer_notes = (
-                        "Audited by Independent Reviewer: Explicitly retained as a testable hypothesis "
-                        "(not a proven clinical cure or unproven universal theorem); uncertainty boundaries documented."
+                        f"נבדק על ידי `{clm.checked_by_agent}`: מסווג כהשערת מחקר לבדיקה (HYPOTHESIS) הכפופה לאימות אמפירי/תצפיתי נוסף."
+                        if is_he
+                        else f"Audited by `{clm.checked_by_agent}`: Retained as an open testable hypothesis (HYPOTHESIS) subject to empirical/observational falsification."
                     )
                 self.store.upsert_claim(clm)
                 checked_count += 1

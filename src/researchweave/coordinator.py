@@ -378,6 +378,7 @@ class ResearchCoordinator:
         model_pool: list[str] | None = None,
         stopping_conditions: dict[str, Any] | None = None,
         run_initial_cycle: bool = True,
+        background_async: bool = False,
     ) -> dict[str, Any]:
         inv = self.store.get_investigation(investigation_id)
         if not inv:
@@ -441,7 +442,19 @@ class ResearchCoordinator:
         )
 
         self._spawn_dynamic_team_and_tasks(inv)
-        if run_initial_cycle:
+        runs_async = bool(background_async)
+        if run_initial_cycle and runs_async and os.getenv("RESEARCHWEAVE_DISABLE_LIVE_LLM") != "1":
+            import threading
+
+            def _bg_worker() -> None:
+                try:
+                    self.execute_research_step(investigation_id, max_tasks=4)
+                except Exception:
+                    pass
+
+            threading.Thread(target=_bg_worker, daemon=True).start()
+            self._refresh_report(investigation_id)
+        elif run_initial_cycle:
             self.execute_research_step(investigation_id, max_tasks=4)
         else:
             self._refresh_report(investigation_id)

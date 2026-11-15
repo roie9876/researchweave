@@ -241,6 +241,7 @@ def create_http_handler(app: ResearchWeaveApp) -> type[BaseHTTPRequestHandler]:
                         if req.stopping_conditions
                         else None,
                         run_initial_cycle=body.get("run_initial_cycle", True),
+                        background_async=bool(body.get("background_async", False)),
                     )
                     self._send_json(bundle)
                     return

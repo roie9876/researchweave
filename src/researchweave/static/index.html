@@ -421,6 +421,22 @@
       </div>
 
       <div id="active-workspace" style="display:none;">
+        <!-- Live Activity & Auto-Refresh Banner -->
+        <div id="live-activity-bar" style="display:flex;justify-content:space-between;align-items:center;gap:10px;padding:10px 14px;margin-bottom:14px;background:rgba(56,189,248,0.1);border:1px solid rgba(56,189,248,0.35);border-radius:10px;font-size:13px;">
+          <div style="display:flex;align-items:center;gap:10px;">
+            <span id="live-pulse-dot" style="width:10px;height:10px;border-radius:50%;background:var(--success);display:inline-block;box-shadow:0 0 8px var(--success);"></span>
+            <strong id="live-activity-title" style="color:var(--accent);">Live System Telemetry:</strong>
+            <span id="live-activity-text" style="color:var(--text);">Idle — awaiting action</span>
+          </div>
+          <div class="inline-row" style="font-size:12px;color:var(--text-muted);">
+            <label style="display:flex;align-items:center;gap:5px;cursor:pointer;">
+              <input type="checkbox" id="chk-auto-refresh" checked onchange="toggleAutoRefresh()" style="width:auto;" />
+              <span>Auto-Refresh (2s)</span>
+            </label>
+            <span id="last-sync-time">—</span>
+          </div>
+        </div>
+
         <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;flex-wrap:wrap;margin-bottom:14px;">
           <div>
             <div class="inline-row" style="margin-bottom:4px;">
@@ -728,13 +744,22 @@ Ambroxol_Analog,1.68,0.44</textarea>
 
     async function confirmAndLaunch() {
       if (!currentInvId) return;
+      const btn = document.getElementById("btn-confirm-run");
+      if (btn) {
+        btn.disabled = true;
+        btn.textContent = "⏳ Launching Agents & Tasks...";
+      }
       const answer = document.getElementById("steer-input").value.trim();
       const res = await fetch(`/api/investigations/${currentInvId}/confirm`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ clarification_answers: answer, run_initial_cycle: true })
+        body: JSON.stringify({ clarification_answers: answer, run_initial_cycle: true, background_async: true })
       });
       const data = await res.json();
+      if (btn) {
+        btn.disabled = false;
+        btn.textContent = "✓ Confirm & Launch Autonomous Run";
+      }
       if (!res.ok) {
         alert(data.error || "Could not launch investigation.");
         return;
@@ -965,12 +990,50 @@ Ambroxol_Analog,1.68,0.44</textarea>
 
       const evGrid = document.getElementById("timeline-events");
       evGrid.innerHTML = "";
-      (bundle.events || []).slice().reverse().forEach(ev => {
+      const eventsList = bundle.events || [];
+      eventsList.slice().reverse().forEach(ev => {
         const d = document.createElement("div");
         d.className = "mini-card";
         d.innerHTML = `<strong>#${ev.id} ${escapeHtml(ev.event_type)}</strong> (${escapeHtml(ev.actor)})<p>${escapeHtml(ev.summary)}</p>`;
         evGrid.appendChild(d);
       });
+
+      // Update Live Activity Banner
+      const runningTask = (bundle.tasks || []).find(t => t.status === "running");
+      const pendingTasks = (bundle.tasks || []).filter(t => t.status === "pending");
+      const latestEv = eventsList.length > 0 ? eventsList[eventsList.length - 1] : null;
+      const pulseDot = document.getElementById("live-pulse-dot");
+      const actText = document.getElementById("live-activity-text");
+      const syncTime = document.getElementById("last-sync-time");
+
+      if (syncTime) {
+        syncTime.textContent = "Synced " + new Date().toLocaleTimeString();
+      }
+      if (inv.status === "running") {
+        if (pulseDot) {
+          pulseDot.style.background = "var(--accent)";
+          pulseDot.style.boxShadow = "0 0 10px var(--accent)";
+        }
+        if (runningTask) {
+          actText.textContent = `Running Task: "${runningTask.title}" via ${runningTask.assigned_agent_name || "Specialist"} (${runningTask.assigned_model || "Foundry"}) — ${m.completed_tasks}/${m.total_tasks} completed`;
+        } else if (pendingTasks.length > 0) {
+          actText.textContent = `Executing autonomous cycle (${m.completed_tasks}/${m.total_tasks} tasks completed) — Next: "${pendingTasks[0].title}"`;
+        } else if (latestEv) {
+          actText.textContent = `[${latestEv.actor}] ${latestEv.summary}`;
+        }
+      } else if (inv.status === "completed") {
+        if (pulseDot) {
+          pulseDot.style.background = "var(--success)";
+          pulseDot.style.boxShadow = "0 0 8px var(--success)";
+        }
+        actText.textContent = `Completed (${m.completed_tasks}/${m.total_tasks} tasks, ${m.verified_claims_count} verified claims, ${m.prov_o_triples_count || 0} PROV-O triples)` + (latestEv ? ` — Latest: ${latestEv.summary}` : "");
+      } else {
+        if (pulseDot) {
+          pulseDot.style.background = "var(--warning)";
+          pulseDot.style.boxShadow = "0 0 8px var(--warning)";
+        }
+        actText.textContent = latestEv ? `[${inv.status}] ${latestEv.summary}` : `Status: ${inv.status}`;
+      }
     }
 
     function renderBrainSection(brain) {
@@ -1015,7 +1078,39 @@ Ambroxol_Analog,1.68,0.44</textarea>
         .replace(/"/g, "&quot;");
     }
 
+    let autoRefreshTimer = null;
+
+    function toggleAutoRefresh() {
+      const enabled = document.getElementById("chk-auto-refresh")?.checked;
+      if (autoRefreshTimer) {
+        clearInterval(autoRefreshTimer);
+        autoRefreshTimer = null;
+      }
+      if (enabled) {
+        autoRefreshTimer = setInterval(async () => {
+          try {
+            await loadInvestigations();
+            if (currentInvId) {
+              const res = await fetch(`/api/investigations/${currentInvId}`);
+              if (res.ok) {
+                const bundle = await res.json();
+                // Avoid overwriting user input while typing in live settings
+                const activeEl = document.activeElement;
+                const isEditingSettings = activeEl && ["live-models", "live-max-hours", "live-max-budget", "brain-query"].includes(activeEl.id);
+                if (!isEditingSettings) {
+                  renderBundle(bundle);
+                }
+              }
+            }
+          } catch (e) {
+            // Ignore transient poll errors
+          }
+        }, 2000);
+      }
+    }
+
     loadInvestigations();
+    toggleAutoRefresh();
   </script>
 </body>
 </html>

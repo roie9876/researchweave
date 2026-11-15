@@ -214,7 +214,7 @@ class AgentScopeTeamRuntime:
                     import concurrent.futures
 
                     with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
-                        out_text = pool.submit(lambda: asyncio.run(_invoke())).result(timeout=28.0)
+                        out_text = pool.submit(lambda: asyncio.run(_invoke())).result(timeout=65.0)
                 else:
                     out_text = asyncio.run(_invoke())
 

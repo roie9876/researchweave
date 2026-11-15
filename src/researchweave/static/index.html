@@ -1042,7 +1042,85 @@ Vitamin_D_25OH,18,ng/mL,30-100</textarea>
 
     function downloadReport(fmt) {
       if (!currentInvId) return;
+      if (fmt === "pdf") {
+        exportRichPdfFromBrowser();
+        return;
+      }
       window.open(`/api/investigations/${currentInvId}/export?format=${fmt}`, "_blank");
+    }
+
+    function exportRichPdfFromBrowser() {
+      const repEl = document.getElementById("report-content");
+      const title = document.getElementById("active-title")?.textContent || "ResearchWeave Report";
+      const isHe = /[\u0590-\u05FF]/.test(title + (repEl?.textContent || "").slice(0, 300));
+      const dir = isHe ? "rtl" : "ltr";
+      const htmlBody = repEl ? repEl.innerHTML : "";
+      const printWin = window.open("", "_blank");
+      if (!printWin) {
+        window.open(`/api/investigations/${currentInvId}/export?format=pdf`, "_blank");
+        return;
+      }
+      printWin.document.write(`<!DOCTYPE html>
+<html lang="${isHe ? "he" : "en"}" dir="${dir}">
+<head>
+  <meta charset="UTF-8" />
+  <title>${escapeHtml(title)} — ResearchWeave PDF</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css" crossorigin="anonymous" />
+  <style>
+    @page { size: A4; margin: 18mm 16mm; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Arial, "Noto Sans Hebrew", sans-serif;
+      color: #0f172a;
+      background: #ffffff;
+      line-height: 1.7;
+      font-size: 13.5px;
+    }
+    h1 { font-size: 21px; color: #0284c7; border-bottom: 2px solid #cbd5e1; padding-bottom: 6px; margin-top: 0; }
+    h2 { font-size: 16.5px; color: #0369a1; margin-top: 18px; margin-bottom: 6px; }
+    h3 { font-size: 14px; color: #1e40af; margin-top: 14px; margin-bottom: 4px; }
+    blockquote {
+      border-inline-start: 3px solid #0284c7;
+      padding-inline-start: 12px;
+      color: #475569;
+      margin: 10px 0;
+    }
+    code {
+      background: #f1f5f9;
+      color: #0f172a;
+      padding: 1px 5px;
+      border-radius: 4px;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      font-size: 12px;
+      direction: ltr;
+      unicode-bidi: isolate;
+      display: inline-block;
+    }
+    pre {
+      background: #f8fafc;
+      border: 1px solid #cbd5e1;
+      border-radius: 6px;
+      padding: 10px;
+      direction: ltr;
+      text-align: left;
+      overflow-x: auto;
+      font-size: 11.5px;
+    }
+    pre code { background: transparent; padding: 0; display: block; }
+    .katex { direction: ltr; unicode-bidi: isolate; color: #0f172a; }
+    .katex-display { direction: ltr; overflow-x: auto; padding: 4px 0; }
+    li { margin-bottom: 6px; }
+  </style>
+</head>
+<body>
+  ${htmlBody}
+  <script>
+    window.onload = function() {
+      setTimeout(function() { window.print(); }, 450);
+    };
+  <\/script>
+</body>
+</html>`);
+      printWin.document.close();
     }
 
     function renderBundle(bundle) {
@@ -1249,8 +1327,9 @@ Vitamin_D_25OH,18,ng/mL,30-100</textarea>
       s = s.replace(/^## (.*)$/gm, "<h2>$1</h2>");
       s = s.replace(/^# (.*)$/gm, "<h1>$1</h1>");
       s = s.replace(/^&gt; (.*)$/gm, "<blockquote>$1</blockquote>");
+      // Bold, italic, inline code (wrapped in <bdi dir="ltr"> so mixed Hebrew + English/code never scrambles)
       s = s.replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>");
-      s = s.replace(/`([^`\n]+)`/g, "<code>$1</code>");
+      s = s.replace(/`([^`\n]+)`/g, '<bdi dir="ltr"><code>$1</code></bdi>');
       s = s.replace(/^\s*- (.*)$/gm, "<li>$1</li>");
       s = s.replace(/\(223\/71\s*&lt;\s*π\s*&lt;\s*22\/7\)/g, "$$(\\tfrac{223}{71} < \\pi < \\tfrac{22}{7})$$");
       s = s.replace(/223\/71\s*&lt;\s*π\s*&lt;\s*22\/7/g, "$$\\tfrac{223}{71} < \\pi < \\tfrac{22}{7}$$");

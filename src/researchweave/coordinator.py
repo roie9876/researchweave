@@ -92,7 +92,7 @@ class FoundryModelAdapter:
                     azure_endpoint=self.endpoint,
                     azure_ad_token_provider=token_provider,
                     api_version="2024-10-21",
-                    timeout=20.0,
+                    timeout=55.0,
                     max_retries=1,
                 )
             except Exception:

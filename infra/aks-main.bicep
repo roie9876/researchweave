@@ -12,6 +12,9 @@ param allowPublicEndpointTag bool = true
 @description('Kubernetes version for the AKS cluster.')
 param kubernetesVersion string = '1.36'
 
+@description('Optional: enable the scale-to-zero GPU node pool (requires subscription GPU VMSS policy allowance).')
+param enableGpuNodePool bool = false
+
 var uniqueSuffix = substring(uniqueString(resourceGroup().id, appPrefix), 0, 6)
 var aksClusterName = '${appPrefix}-${uniqueSuffix}-aks'
 var postgresServerName = '${appPrefix}-${uniqueSuffix}-pg'
@@ -248,68 +251,72 @@ resource aksCluster 'Microsoft.ContainerService/managedClusters@2024-02-01' = {
         }
       }
     }
-    agentPoolProfiles: [
-      {
-        name: 'apppool'
-        mode: 'System'
-        count: 2
-        minCount: 1
-        maxCount: 5
-        enableAutoScaling: true
-        vmSize: 'Standard_D4s_v5'
-        osType: 'Linux'
-        osSKU: 'AzureLinux'
-        nodeLabels: {
-          'researchweave.io/pool': 'app'
+    agentPoolProfiles: concat(
+      [
+        {
+          name: 'apppool'
+          mode: 'System'
+          count: 2
+          minCount: 1
+          maxCount: 5
+          enableAutoScaling: true
+          vmSize: 'Standard_D4s_v5'
+          osType: 'Linux'
+          osSKU: 'AzureLinux'
+          nodeLabels: {
+            'researchweave.io/pool': 'app'
+          }
         }
-      }
-      {
-        name: 'brainpool'
-        mode: 'User'
-        count: 2
-        minCount: 2
-        maxCount: 6
-        enableAutoScaling: true
-        vmSize: 'Standard_E8s_v5'
-        osType: 'Linux'
-        osSKU: 'AzureLinux'
-        nodeLabels: {
-          'researchweave.io/pool': 'brain'
+        {
+          name: 'brainpool'
+          mode: 'User'
+          count: 2
+          minCount: 2
+          maxCount: 6
+          enableAutoScaling: true
+          vmSize: 'Standard_E8s_v5'
+          osType: 'Linux'
+          osSKU: 'AzureLinux'
+          nodeLabels: {
+            'researchweave.io/pool': 'brain'
+          }
         }
-      }
-      {
-        name: 'sandboxpool'
-        mode: 'User'
-        count: 1
-        minCount: 1
-        maxCount: 8
-        enableAutoScaling: true
-        vmSize: 'Standard_D4s_v5'
-        osType: 'Linux'
-        osSKU: 'AzureLinux'
-        workloadRuntime: 'KataMshvVmIsolation'
-        nodeLabels: {
-          'researchweave.io/pool': 'sandbox'
+        {
+          name: 'sandboxpool'
+          mode: 'User'
+          count: 1
+          minCount: 1
+          maxCount: 8
+          enableAutoScaling: true
+          vmSize: 'Standard_D4s_v5'
+          osType: 'Linux'
+          osSKU: 'AzureLinux'
+          workloadRuntime: 'KataMshvVmIsolation'
+          nodeLabels: {
+            'researchweave.io/pool': 'sandbox'
+          }
         }
-      }
-      {
-        name: 'gpupool'
-        mode: 'User'
-        count: 0
-        minCount: 0
-        maxCount: 4
-        enableAutoScaling: true
-        vmSize: 'Standard_NC4as_T4_v3'
-        osType: 'Linux'
-        osSKU: 'Ubuntu'
-        nodeLabels: {
-          'researchweave.io/pool': 'gpu'
+      ],
+      enableGpuNodePool ? [
+        {
+          name: 'gpupool'
+          mode: 'User'
+          count: 0
+          minCount: 0
+          maxCount: 4
+          enableAutoScaling: true
+          vmSize: 'Standard_NC4as_T4_v3'
+          osType: 'Linux'
+          osSKU: 'Ubuntu'
+          nodeLabels: {
+            'researchweave.io/pool': 'gpu'
+          }
+          nodeTaints: [
+            'nvidia.com/gpu=true:NoSchedule'
+          ]
         }
-        nodeTaints: [
-          'nvidia.com/gpu=true:NoSchedule'
-        ]
-      }
-    ]
+      ] : []
+    )
   }
 }
 

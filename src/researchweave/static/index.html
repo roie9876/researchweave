@@ -1330,7 +1330,16 @@ Vitamin_D_25OH,18,ng/mL,30-100</textarea>
         return `@@CODEBLOCK_${idx}@@`;
       });
 
-      let s = escapeHtml(raw);
+      // 2. Extract display math $$...$$ and \[...\] BEFORE newline-to-<br/> conversion so multi-line LaTeX equations stay intact
+      const mathBlocks = [];
+      let rawNoCode = escapeHtml(raw);
+      rawNoCode = rawNoCode.replace(/(\$\$[\s\S]*?\$\$|\\\[[\s\S]*?\\\])/g, m => {
+        const idx = mathBlocks.length;
+        mathBlocks.push(m.replace(/\n/g, " "));
+        return `@@MATHBLOCK_${idx}@@`;
+      });
+
+      let s = rawNoCode;
       s = s.replace(/^### (.*)$/gm, "<h3>$1</h3>");
       s = s.replace(/^## (.*)$/gm, "<h2>$1</h2>");
       s = s.replace(/^# (.*)$/gm, "<h1>$1</h1>");
@@ -1343,7 +1352,8 @@ Vitamin_D_25OH,18,ng/mL,30-100</textarea>
       s = s.replace(/223\/71\s*&lt;\s*π\s*&lt;\s*22\/7/g, "$$\\tfrac{223}{71} < \\pi < \\tfrac{22}{7}$$");
       s = s.replace(/\n\n+/g, "<br/><br/>");
 
-      // Restore protected code blocks
+      // Restore display math and protected code blocks
+      s = s.replace(/@@MATHBLOCK_(\d+)@@/g, (_m, idx) => mathBlocks[Number(idx)] || "");
       s = s.replace(/@@CODEBLOCK_(\d+)@@/g, (_m, idx) => codeBlocks[Number(idx)] || "");
       return s;
     }

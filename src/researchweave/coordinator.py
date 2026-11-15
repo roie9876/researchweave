@@ -1684,10 +1684,18 @@ class ResearchCoordinator:
             )
         )
 
+        is_he = inv.get("report_language", "en").lower().startswith("he") or any(
+            "\u0590" <= ch <= "\u05ff" for ch in inv.get("objective", "")
+        )
+        calc_stmt = (
+            f"חישוב כמותי בסביבה מבודדת (Sandbox) אימת את פלט המודל: `{task.code_output}`"
+            if is_he
+            else f"Isolated sandbox computation verified quantitative model output: `{task.code_output}`"
+        )
         self.store.upsert_claim(
             ClaimRecord(
                 investigation_id=inv_id,
-                statement=f"Isolated sandbox computation verified quantitative model output: {task.code_output}",
+                statement=calc_stmt,
                 category="calculation",
                 verification_state=VerificationState.CALCULATED,
                 confidence=0.95 if res["success"] else 0.3,
@@ -1817,9 +1825,23 @@ class ResearchCoordinator:
         claims_digest = "\n".join(
             f"- [ID={c.get('id')} | state={c.get('verification_state')}] {c.get('statement')}" for c in claims
         )
+        # Collect all [src-...] IDs cited across Literature and Hypothesis claims so the Auditor gets every cited paper
+        cited_in_claims: list[str] = []
+        for c_dict in claims:
+            for m_id in re.findall(r"src-[a-zA-Z0-9]+", c_dict.get("statement") or ""):
+                if m_id not in cited_in_claims:
+                    cited_in_claims.append(m_id)
+            for s_id in c_dict.get("supporting_source_ids") or []:
+                if s_id not in cited_in_claims:
+                    cited_in_claims.append(s_id)
+
+        cited_sources = [s for s in sources if s.get("id") in cited_in_claims]
+        remaining_sources = [s for s in sources if s.get("id") not in cited_in_claims]
+        auditor_sources = (cited_sources + remaining_sources)[:30]
+
         sources_digest = "\n".join(
-            f"- [{s.get('id')}] {s.get('title')} ({s.get('uri_or_path')}): {s.get('excerpt', '')[:220]}"
-            for s in sources[:18]
+            f"- [{s.get('id')}] {s.get('title')} ({s.get('uri_or_path')}): {s.get('excerpt', '')[:250]}"
+            for s in auditor_sources
         )
         sandbox_digest = "\n".join(
             f"Task '{t.get('title')}':\n```python\n{t.get('code_executed')}\n```\nOutput: `{t.get('code_output')}`"

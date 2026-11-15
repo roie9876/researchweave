@@ -354,7 +354,7 @@ def search_openalex_live(query: str, max_results: int = 10, timeout: float = 6.0
             papers.append(
                 {
                     "pmid": f"OpenAlex:{oa_id}",
-                    "title": f"{title}{venue_tag} ({', '.join(authors[:3])}, {year}; Citations: {cited_by})".strip(" (,)"),
+                    "title": f"{title}{venue_tag} ({', '.join(authors[:3])}, {year}; Citations: {cited_by})",
                     "abstract": abstract[:900],
                     "authors": ", ".join(authors),
                     "year": year,
@@ -407,7 +407,7 @@ def search_semanticscholar_live(query: str, max_results: int = 8, timeout: float
             papers.append(
                 {
                     "pmid": f"S2:{pid}",
-                    "title": f"{title}{venue_tag} ({', '.join(authors[:3])}, {year}; Citations: {cited_by})".strip(" (,)"),
+                    "title": f"{title}{venue_tag} ({', '.join(authors[:3])}, {year}; Citations: {cited_by})",
                     "abstract": abstract[:900],
                     "authors": ", ".join(authors),
                     "year": year,
@@ -461,7 +461,7 @@ def search_europepmc_live(query: str, max_results: int = 8, timeout: float = 6.0
             papers.append(
                 {
                     "pmid": f"EPMC:{pmid}",
-                    "title": f"{title}{j_tag} ({authors[:50]}, {year}; Citations: {cited_by})".strip(" (,)"),
+                    "title": f"{title}{j_tag} ({authors[:50]}, {year}; Citations: {cited_by})",
                     "abstract": abstract[:900],
                     "authors": authors[:80],
                     "year": year,

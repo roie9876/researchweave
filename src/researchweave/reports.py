@@ -225,18 +225,25 @@ def build_live_report_markdown(
 
     lines.append("## 6. מקורות מידע וציטוטים" if is_he else "## 6. Cited Sources & Provenance")
     if sources:
-        # Prioritize sources referenced by claims plus top-ranked primary sources (up to 25 in report, while full list stays in Brain DB)
+        # Prioritize sources referenced by claims OR cited anywhere in the report text + sandbox/uploaded artifacts
+        all_claim_text = " ".join(
+            f"{c.get('statement', '')} {c.get('reviewer_notes', '')}" for c in claims
+        )
+        text_cited_ids = set(re.findall(r"src-[a-zA-Z0-9]+", all_claim_text))
         referenced_ids = {
             sid
             for c in claims
             for sid in (c.get("supporting_source_ids") or [])
-        }
+        } | text_cited_ids
         primary_sources = [s for s in sources if s["id"] in referenced_ids or s.get("source_type") in ("uploaded_file", "calculation_artifact")]
         other_sources = [s for s in sources if s["id"] not in referenced_ids and s.get("source_type") not in ("uploaded_file", "calculation_artifact")]
-        display_sources = (primary_sources + other_sources)[:25]
+        display_sources = (primary_sources + other_sources)[:28]
         for s in display_sources:
+            clean_title = re.sub(r"</?[a-zA-Z0-9]+>", "", html.unescape(s["title"])).strip()
+            if clean_title.count("(") > clean_title.count(")"):
+                clean_title += ")"
             lines.append(
-                f"- **`[{s['id']}]` {s['title']}** (`{s['source_type']}`) — `{s['uri_or_path']}` (SHA-256: `{s['content_hash'][:12]}...`)"
+                f"- **`[{s['id']}]` {clean_title}** (`{s['source_type']}`) — `{s['uri_or_path']}` (SHA-256: `{s['content_hash'][:12]}...`)"
             )
         if len(sources) > len(display_sources):
             lines.append(

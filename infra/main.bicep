@@ -6,8 +6,11 @@ param location string = resourceGroup().location
 @maxLength(14)
 param appPrefix string = 'rweave'
 
-@description('Container image for the ResearchWeave application.')
-param containerImage string = 'ghcr.io/researchweave/researchweave:latest'
+@description('Container image for the ResearchWeave application (defaults to public python:3.12-slim with automatic GitHub bootstrap).')
+param containerImage string = 'docker.io/library/python:3.12-slim'
+
+@description('GitHub tarball URL used when booting from a base Python image.')
+param repoArchiveUrl string = 'https://github.com/roie9876/researchweave/archive/refs/heads/main.tar.gz'
 
 @description('Enable public network access tag (SecurityControl=Ignore) when required by subscription policy.')
 param allowPublicEndpointTag bool = true
@@ -160,6 +163,11 @@ resource containerApp 'Microsoft.App/containerApps@2024-03-01' = {
         {
           name: 'researchweave'
           image: containerImage
+          command: [
+            'python3'
+            '-c'
+            'import importlib.util, os, pathlib, subprocess, sys, tarfile, urllib.request\nif not importlib.util.find_spec("researchweave"):\n    urllib.request.urlretrieve(os.environ["RESEARCHWEAVE_ARCHIVE_URL"], "/tmp/rw.tar.gz")\n    with tarfile.open("/tmp/rw.tar.gz") as tf:\n        tf.extractall("/tmp/rw")\n    src_dir = str(next(pathlib.Path("/tmp/rw").iterdir()))\n    subprocess.check_call([sys.executable, "-m", "pip", "install", "--no-cache-dir", src_dir])\nos.execvp(sys.executable, [sys.executable, "-m", "researchweave.server"])'
+          ]
           resources: {
             cpu: json('1.0')
             memory: '2Gi'
@@ -168,6 +176,14 @@ resource containerApp 'Microsoft.App/containerApps@2024-03-01' = {
             {
               name: 'PORT'
               value: '8080'
+            }
+            {
+              name: 'RESEARCHWEAVE_DATA_DIR'
+              value: '/tmp/researchweave_data'
+            }
+            {
+              name: 'RESEARCHWEAVE_ARCHIVE_URL'
+              value: repoArchiveUrl
             }
             {
               name: 'AZURE_CLIENT_ID'

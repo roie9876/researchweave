@@ -5,7 +5,7 @@
     "_generator": {
       "name": "bicep",
       "version": "0.44.1.10279",
-      "templateHash": "6444044521740038441"
+      "templateHash": "12940114262546796215"
     }
   },
   "parameters": {
@@ -27,9 +27,16 @@
     },
     "containerImage": {
       "type": "string",
-      "defaultValue": "ghcr.io/researchweave/researchweave:latest",
+      "defaultValue": "docker.io/library/python:3.12-slim",
       "metadata": {
-        "description": "Container image for the ResearchWeave application."
+        "description": "Container image for the ResearchWeave application (defaults to public python:3.12-slim with automatic GitHub bootstrap)."
+      }
+    },
+    "repoArchiveUrl": {
+      "type": "string",
+      "defaultValue": "https://github.com/roie9876/researchweave/archive/refs/heads/main.tar.gz",
+      "metadata": {
+        "description": "GitHub tarball URL used when booting from a base Python image."
       }
     },
     "allowPublicEndpointTag": {
@@ -196,6 +203,11 @@
             {
               "name": "researchweave",
               "image": "[parameters('containerImage')]",
+              "command": [
+                "python3",
+                "-c",
+                "import importlib.util, os, pathlib, subprocess, sys, tarfile, urllib.request\nif not importlib.util.find_spec(\"researchweave\"):\n    urllib.request.urlretrieve(os.environ[\"RESEARCHWEAVE_ARCHIVE_URL\"], \"/tmp/rw.tar.gz\")\n    with tarfile.open(\"/tmp/rw.tar.gz\") as tf:\n        tf.extractall(\"/tmp/rw\")\n    src_dir = str(next(pathlib.Path(\"/tmp/rw\").iterdir()))\n    subprocess.check_call([sys.executable, \"-m\", \"pip\", \"install\", \"--no-cache-dir\", src_dir])\nos.execvp(sys.executable, [sys.executable, \"-m\", \"researchweave.server\"])"
+              ],
               "resources": {
                 "cpu": "[json('1.0')]",
                 "memory": "2Gi"
@@ -204,6 +216,14 @@
                 {
                   "name": "PORT",
                   "value": "8080"
+                },
+                {
+                  "name": "RESEARCHWEAVE_DATA_DIR",
+                  "value": "/tmp/researchweave_data"
+                },
+                {
+                  "name": "RESEARCHWEAVE_ARCHIVE_URL",
+                  "value": "[parameters('repoArchiveUrl')]"
                 },
                 {
                   "name": "AZURE_CLIENT_ID",
